@@ -1,0 +1,36 @@
+{
+  "name": "andruavserver",
+  "version": "2.9.0",
+  "author": {
+    "name": "Mohammad Said Hefny",
+    "email": "mohammad.hefny@gmail.com"
+  },
+  "keywords": [
+    "webrtc",
+    "p2p",
+    "peer"
+  ],
+  "bugs": {
+    "email": "rcmobilestuff@gmail.com"
+  },
+  "scripts": {
+    "start": "node ./server.js"
+  },
+  "bin": {
+    "andruavmainserver": "server.js"
+  },
+  "dependencies": {
+    "commander": "^2.11.0",
+    "ejs": "^2.7.1",
+    "express": "^4.17.1",
+    "lodash": "^4.17.15",
+    "moment": "^2.15.0",
+    "mysql2": "^2.3.2",
+    "qs": "^6.9.4",
+    "randomstring": "^1.1.5",
+    "udp-packet": "^1.0.0",
+    "uuid": "^8.3.2",
+    "uuidv4": "^6.0.6",
+    "ws": "^7.2.3"
+  }
+}
