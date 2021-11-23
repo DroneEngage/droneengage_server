@@ -41,16 +41,6 @@ function fn_displayInfo ()
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
     console.log ("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + " port: " + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + " port: " + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
-    if ((global.m_serverconfig.m_configuration.webadmin_port_enable === true) 
-    || (global.m_serverconfig.m_configuration.webadmin_port !=null)
-    || (isNan(global.m_serverconfig.m_configuration.webadmin_port)))
-    {
-        console.log ("WebAdmin: " + global.Colors.BSuccess +   global.m_serverconfig.m_configuration.webadmin_port + global.Colors.Reset);
-    }
-    else
-    {
-        console.log ("WebAdmin " + global.Colors.Error + "DISABLED"  + global.Colors.Reset);   
-    }
     console.log ("Datetime: %s", new Date());
     console.log ("==================================");
 }
