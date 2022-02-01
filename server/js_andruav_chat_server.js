@@ -8,7 +8,7 @@ const c_dumpError = require("../dumperror.js");
 
 const c_CONSTANTS = require ("../js_constants");
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
-
+const c_CommServerManagerClient = require("./js_comm_server_manager_client");
 const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
 
@@ -608,6 +608,7 @@ function fn_onConnect_Handler(p_ws,p_req)
         if (p_ws.m_loginRequest != null)
         {
             delete m_activeSenderIDsList[p_ws.m_loginRequest.m_senderID];
+            c_CommServerManagerClient.fn_onMessageOpened();
         }
     }
 
@@ -692,6 +693,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             {
                 p_ws.close();
             }
+            c_CommServerManagerClient.fn_onMessageOpened();
         }
         catch (ex)
         {
@@ -751,6 +753,14 @@ function fn_startServer ()
     fn_startChatServer();
 }
 
+/**
+ * 
+ * @param {*} p_tempLoginKey key sent by AuthServer
+ * @param {*} p_LoginRequest p_cmd.d{a: SID, at: actor type (d for drone) d, 
+ *  b:GroupID=1, 
+ *  r: requestID GUID, 
+ *  f: login_temp_key (same as p_tempLoginKey)}
+ */
 function fn_addWaitingAccount (p_tempLoginKey,p_LoginRequest)
 {
     m_waitingAccounts[p_tempLoginKey] = p_LoginRequest;  // PartyName Temp
@@ -779,7 +789,7 @@ function fn_cancelLoginRequestBySenderID (p_requestID)
         if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID)
         {
             delete m_waitingAccounts [c_keys[i]];
-
+            c_CommServerManagerClient.fn_onMessageOpened();
             return ;
         }
     }
