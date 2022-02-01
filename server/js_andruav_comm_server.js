@@ -1,12 +1,11 @@
 "use strict";
 
 const m_commServerManagerClient = require ("./js_comm_server_manager_client");
-var m_charServer; // = global.m_chat_server_singelton_get_instance();
+var m_agent_chat_server; 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
 const c_uuidv4 = require('uuidv4');
 const c_CONSTANTS = require ("../js_constants");
 const v_version = require('../package.json').version;
-var v_validationKey = ['000-0000-000-0000','000-0000-000-0000'];
 
 /**
  * Decrypt message from Auth server. 
@@ -29,7 +28,11 @@ function fn_decryptAuthMessage (p_msg)
     return null;
 }
 
-
+/**
+ * Generates a reply to a login request. Should be a temp key used by agent to login and server IP & port.
+ * @param {*} p_cmd request from AUTH_SERVER
+ * @returns 
+ */
 function fn_generateLoginRequestReply (p_cmd)
 {
     const c_reply = {
@@ -56,13 +59,21 @@ function fn_AuthServerConnectionHandler ()
     fn_updateServerWatchdog();
 }
 
-function fn_handleLoginResponses (p_cmd)
+/**
+ * Generates CONST_CS_LOGIN_TEMP_KEY to be sent to agent through AndruavAuth
+ * Agent will use this key to connect to AndruavServer.
+ * add it to waiting list so that can be either deleted when timeout or retrieved when agent connects to AndruavServer.            
+ * @param {*} p_cmd JSON object of contains details of connection request.
+ * p_cmd.c = 'b' for new login request.
+ * p_cmd.d{a: SID, at: actor type (d for drone) d, b:GroupID=1, r: requestID GUID, f: login_temp_key (instead of party ID)}
+ */
+ function fn_handleLoginResponses (p_cmd)
 {
     // Generates CONST_CS_LOGIN_TEMP_KEY to be sent to agent through AndruavAuth
     // Agent will use this key to connect to AndruavServer.
     p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = c_uuidv4.uuid().replaceAll('-','');
     // add it to waiting list so that can be either deleted when timeout or retrieved when agent connects to AndruavServer.            
-    m_charServer.fn_addWaitingAccount (p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()],p_cmd.d);
+    m_agent_chat_server.fn_addWaitingAccount (p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()],p_cmd.d);
     console.log ("New Party: " + JSON.stringify(p_cmd));
 
     const c_reply = fn_generateLoginRequestReply (p_cmd);
@@ -114,11 +125,6 @@ function fn_AuthServerMessagesHandler (p_msg)
     }
 }
 
-// function fn_refreshDynamicKeys ()
-// {
-//     v_validationKey[0] = v_validationKey[1];
-//     v_validationKey[1] = c_uuidv4.uuid();
-// }
 
 function fn_updateServerWatchdog()
 {
@@ -131,9 +137,7 @@ function fn_updateServerWatchdog()
                     'serverId':global.m_serverconfig.m_configuration.server_id,
                     'public_host':global.m_serverconfig.m_configuration.public_host, // this is the ip that is listening to the connections.
                     'serverPort':global.m_serverconfig.m_configuration.server_port,
-                    //'wsauthkey': v_validationKey[1],  // update with latest
                     'accounts':c_ChatAccountRooms.fn_getUnitKeys()
-                    //'accounts':[]
                 };
         
         // send Info Card to Andruav Auth
@@ -184,8 +188,8 @@ function fn_startServer ()
     m_commServerManagerClient.fn_onMessageReceived  = fn_AuthServerMessagesHandler;
     m_commServerManagerClient.fn_onMessageOpened    = fn_AuthServerConnectionHandler;
     m_commServerManagerClient.fn_startServer();
-    m_charServer = global.m_chat_server_singelton_get_instance();
-    m_charServer.fn_startServer();
+    m_agent_chat_server = global.m_chat_server_singelton_get_instance();
+    m_agent_chat_server.fn_startServer();
     
 }
 
