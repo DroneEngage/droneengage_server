@@ -6,8 +6,7 @@
  */
 
 
-
-const c_uuidv4 = require('uuidv4');
+const { v4: uuidv4 } = require('uuid');
 const _dumpError = require("../dumperror.js");
 
 
@@ -192,7 +191,7 @@ function Group (m_accountObj, p_ID)
     this.m_parentAccount = m_accountObj; //  u should make this == null if you want to delete this object.
     this.m_units = {};
 
-    this.uid = c_uuidv4.uuid();
+    this.uid = uuidv4();
     this.m_creationDate = Date.now();
     this.m_TTX = 0;
     this.m_BTX = 0;

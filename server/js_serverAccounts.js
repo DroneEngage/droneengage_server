@@ -1,5 +1,5 @@
 
-const c_uuidv4 = require('uuidv4');
+const { v4: uuidv4 } = require('uuid');
 const c_dumpError = require("./js_dumperror.js");
 
 function consoleLog(text)
@@ -197,7 +197,7 @@ function Group (account,id)
     this.m_speed = 0.0;
     this.alt = 0.0;
     this.gps = false;
-    this.uid = c_uuidv4.uuid();
+    this.uid = uuidv4();
     
     Object.seal(this);
 }

@@ -3,7 +3,7 @@
 const m_commServerManagerClient = require ("./js_comm_server_manager_client");
 var m_agent_chat_server; 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
-const c_uuidv4 = require('uuidv4');
+const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require ("../js_constants");
 const v_version = require('../package.json').version;
 
@@ -71,7 +71,7 @@ function fn_AuthServerConnectionHandler ()
 {
     // Generates CONST_CS_LOGIN_TEMP_KEY to be sent to agent through AndruavAuth
     // Agent will use this key to connect to AndruavServer.
-    p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = c_uuidv4.uuid().replaceAll('-','');
+    p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = uuidv4().replaceAll('-','');
     // add it to waiting list so that can be either deleted when timeout or retrieved when agent connects to AndruavServer.            
     m_agent_chat_server.fn_addWaitingAccount (p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()],p_cmd.d);
     console.log ("New Party: " + JSON.stringify(p_cmd));
