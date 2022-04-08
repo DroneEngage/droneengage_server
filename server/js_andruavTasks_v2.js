@@ -52,13 +52,13 @@ function fn_getTasksSQLWhere2(largerThan_SID, accountID,  party_sid, groupName, 
 {
 	var sql = "";
 	var putAnd = false;
-	if ((largerThan_SID != null) && (largerThan_SID != undefined))
+	if ((largerThan_SID != null) && (largerThan_SID != undefined) && (typeof(largerThan_SID) == 'string'))
 	{
 		sql = sql + " SID  > " + largerThan_SID.fn_protectedFromInjection() ; 
 		putAnd = true;
 	}
 
-	if ((accountID != null) && (accountID != undefined))
+	if ((accountID != null) && (accountID != undefined) && (typeof(largerThan_SID) == 'string'))
 	{
 		if (putAnd) sql = sql + " AND ";
 		sql = sql + " accountID = '" + accountID.fn_protectedFromInjection() + "'"; 
