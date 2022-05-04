@@ -26,7 +26,6 @@ exports.fn_initTasks = function ()
 	
 		// Database Connection
 		v_dbPool      =    mysql.createPool({
-			acquireTimeout: 30000, // 30s
 			connectionLimit : 18, //important
 			queueLimit: 19,
 			host     : global.m_serverconfig.m_configuration.dbIP,
