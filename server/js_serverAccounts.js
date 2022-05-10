@@ -291,7 +291,7 @@ Group.prototype.forEach = function (callback)
 }
 
 
-Group.prototype.fn_sendToIndividual = function(message, v_isBinary, target, ws)
+Group.prototype.fn_sendToIndividual = function(message, v_isBinary, target)
 {
    try
     {
