@@ -298,7 +298,7 @@ Group.prototype.forEach = function (callback)
 }
 
 
-Group.prototype.fn_sendToIndividual = function(message, isbinary, target, c_ws)
+Group.prototype.fn_sendToIndividual = function(message, isbinary, target)
 {
    try
     {
@@ -402,25 +402,24 @@ Group.prototype.fn_broadcastToGCS = function(message, isbinary, c_ws)
 }
 
 
-Group.prototype.fn_broadcastToDrone = function(message, isbinary, c_ws)
+Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
 {
-    var keys = Object.keys(this.m_units) ; 
-    var len = keys.length;
-    // console.log ("Group.forEach Keys:" + keys);
-   
+    const keys = Object.keys(this.m_units) ; 
+    const len = keys.length;
+    const sender_id = c_ws.m_loginRequest.m_senderID;
+
     for (var i=0; i < len; ++i)
     {
          try
         {
             var socket = this.m_units[keys[i]];
-            if ((socket.m_loginRequest.m_actorType === 'd')
-                && (socket.m_loginRequest.m_senderID != c_ws.m_loginRequest.m_senderID))
+            
+            // do not send back to yourself.
+            if ((socket.m_loginRequest.m_senderID != sender_id)) 
             {
-                //xconsoleLog ('func: send message to %s' ,value.Name);
-
-                socket.send(message,
+                socket.send(p_message,
                 {
-                    binary: isbinary
+                    binary: p_isbinary
                 });
             }
         }
@@ -456,16 +455,18 @@ Group.prototype.fn_broadcastToDrone = function(message, isbinary, c_ws)
 
 Group.prototype.broadcast = function(p_message, p_isbinary, c_ws)
 {
-    var keys = Object.keys(this.m_units) ; 
-    var len = keys.length;
-    // console.log ("Group.forEach Keys:" + keys);
-   
+    const keys = Object.keys(this.m_units) ; 
+    const len = keys.length;
+    const sender_id = c_ws.m_loginRequest.m_senderID;
+
     for (var i=0; i < len; ++i)
     {
          try
         {
             var c_targetSocket = this.m_units[keys[i]];
-            if (c_targetSocket.name != c_ws.name)
+
+            // do not send back to yourself.
+            if ((c_targetSocket.m_loginRequest.m_senderID != sender_id)) 
             {
                 //xconsoleLog ('func: send message to %s' ,value.Name);
 

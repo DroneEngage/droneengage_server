@@ -103,7 +103,7 @@ function send_message_toTarget(message, isbinary, target, ws)
 	//xconsole.log ('func: send_message_toTarget');
 	try
 	{	
-		ws.m__group.fn_sendToIndividual (message,isbinary,target,ws);
+		ws.m__group.fn_sendToIndividual (message,isbinary,target);
 	}
 	catch (err)
 	{
@@ -228,7 +228,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
             try
             {
-                v_jmsg = JSON.parse(p_message); //PHP sends Json data
+                v_jmsg = JSON.parse(p_message); 
             }
             catch
             {
@@ -255,23 +255,24 @@ function fn_onConnect_Handler(p_ws,p_req)
                 //  a. Agent with null target means [broadcast] cannot broadcast to another agent.
                 //  b. Target is GCS regardless who the sender is.
                 //  c. Agent with _GD_ target meas [broadcast] to all including other drones.
-                if ((p_ws.m_loginRequest.m_actorType === 'd')
-                && (((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null))
-                || ((v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_GCS_"))))
+                if (p_ws.m_loginRequest.m_actorType === 'd')
                 {
-                    // it is an agent so if broadcast then broadcast to GCS
-                    send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                    if (((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null))
+                    || ((v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_GCS_")))
+                    {
+                        // it is an agent so if broadcast then broadcast to GCS
+                        send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                    }
+                    else
+                    if ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == "_GD_"))
+                    {
+                        send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                    }
                 }
                 else
                 // 2- GCS has no target then send to ALL AGENTS & GCS
                 if ((p_ws.m_loginRequest.m_actorType === 'g')
                 && ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null)))
-                {
-                    send_message_toMyGroup (p_message, p_isBinary, p_ws);
-                }
-                else
-                if ((p_ws.m_loginRequest.m_actorType === 'd')
-                && ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == "_GD_")))
                 {
                     send_message_toMyGroup (p_message, p_isBinary, p_ws);
                 }
