@@ -355,13 +355,15 @@ Group.prototype.fn_broadcastToGCS = function(message, isbinary, c_ws)
     var len = keys.length;
     // console.log ("Group.forEach Keys:" + keys);
    
+    const sender_id = c_ws.m_loginRequest.m_senderID;
+    
     for (var i=0; i < len; ++i)
     {
          try
         {
             var socket = this.m_units[keys[i]];
             if ((socket.m_loginRequest.m_actorType === 'g')
-                && (socket.m_loginRequest.m_senderID != c_ws.m_loginRequest.m_senderID))
+                && (socket.m_loginRequest.m_senderID != sender_id))
             {
                 //xconsoleLog ('func: send message to %s' ,value.Name);
 

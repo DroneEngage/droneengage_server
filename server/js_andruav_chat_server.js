@@ -251,42 +251,56 @@ function fn_onConnect_Handler(p_ws,p_req)
             try
             {
                 // ROUTING LOGIC:
-                // 1- 
-                //  a. Agent with null target means [broadcast] cannot broadcast to another agent.
-                //  b. Target is GCS regardless who the sender is.
-                //  c. Agent with _GD_ target meas [broadcast] to all including other drones.
+                // 1- Target is GCS regardless who the sender is.
+                // 2-
+                //  a. Sender is an agent with null target means [broadcast] cannot broadcast to another agent.
+                //  b. Sender is an agent with _GD_ target means [broadcast] to all including other drones.
+                // 3- GCS Logic:
+                // 3-a. GCS has no target then send to ALL AGENTS & GCS.
+                // 3-b. GCS specifies AGENTS as target.
+                // 4- one-to-one message as target not a reserved word.
+
+                if (v_jmsg.hasOwnProperty('tg')===true)
+                {
+                    switch (v_jmsg['tg'])
+                    {
+                        case "_GCS_":
+                            // Target is GCS regardless who the sender is means [broadcast] to all GCS.
+                            send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                            break;
+                        case "_GD_":
+                            // Target is _GD_  means [broadcast] to all units including GCS & drones.
+                            send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                            break;
+                        case "_AGN_":
+                            // Target is _AGN_  means [broadcast] to all drones.
+                            send_message_toMyGroup_Agent(p_message, p_isBinary, p_ws);
+                            break;
+                        default:
+                            // ONE to ONE Message
+                            send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws);
+                            break;        
+                    }
+                    break;
+                }
+                else
+                // 2- Agent  & (v_jmsg['tg'] == null)
                 if (p_ws.m_loginRequest.m_actorType === 'd')
                 {
-                    if (((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null))
-                    || ((v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_GCS_")))
-                    {
-                        // it is an agent so if broadcast then broadcast to GCS
-                        send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
-                    }
-                    else
-                    if ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == "_GD_"))
-                    {
-                        send_message_toMyGroup (p_message, p_isBinary, p_ws);
-                    }
+                    // Default broadcast for agents is to GCS only
+                    send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                    break;
                 }
                 else
-                // 2- GCS has no target then send to ALL AGENTS & GCS
-                if ((p_ws.m_loginRequest.m_actorType === 'g')
-                && ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null)))
+                // 3- GCS Logic  & (v_jmsg['tg'] == null)
+                if (p_ws.m_loginRequest.m_actorType === 'g')
                 {
+                    // Default broadcast for GCS is to all units.
                     send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                    break;
                 }
-                else// 3- GCS specifies AGENTS as target
-                if ((p_ws.m_loginRequest.m_actorType === 'g') 
-                && (v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_AGN_"))
-                {
-                    // it is an agent so if broadcast then broadcast to agents
-                    send_message_toMyGroup_Agent(p_message, p_isBinary, p_ws);
-                }
-                else
-                {
-                    send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws);
-                }
+
+                
                 
             }
             catch (e)
@@ -578,7 +592,6 @@ function fn_onConnect_Handler(p_ws,p_req)
             
         }
     }
-
 
     function fn_onWsMessage (p_msg)
     {
