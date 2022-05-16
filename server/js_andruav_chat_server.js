@@ -257,36 +257,39 @@ function fn_onConnect_Handler(p_ws,p_req)
                 //  c. Agent with _GD_ target meas [broadcast] to all including other drones.
                 if (p_ws.m_loginRequest.m_actorType === 'd')
                 {
-                    if (((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null))
-                    || ((v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_GCS_")))
+                    if ((v_jmsg['tg'] == null) || (v_jmsg['tg'] == "_GCS_"))
                     {
                         // it is an agent so if broadcast then broadcast to GCS
                         send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                        break;
                     }
                     else
-                    if ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == "_GD_"))
+                    if ((v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == "_GD_"))
                     {
                         send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                        break;
                     }
                 }
                 else
                 // 2- GCS has no target then send to ALL AGENTS & GCS
-                if ((p_ws.m_loginRequest.m_actorType === 'g')
-                && ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null)))
+                if (p_ws.m_loginRequest.m_actorType === 'g')
                 {
-                    send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                    if ((!v_jmsg.hasOwnProperty('tg')) || (v_jmsg['tg'] == null))
+                    {
+                        send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                        break;
+                    }
+                    else// 3- GCS specifies AGENTS as target
+                    if ((v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_AGN_"))
+                    {
+                        // it is an agent so if broadcast then broadcast to agents
+                        send_message_toMyGroup_Agent(p_message, p_isBinary, p_ws);
+                        break;
+                    }
                 }
-                else// 3- GCS specifies AGENTS as target
-                if ((p_ws.m_loginRequest.m_actorType === 'g') 
-                && (v_jmsg.hasOwnProperty('tg')) && (v_jmsg['tg'] == "_AGN_"))
-                {
-                    // it is an agent so if broadcast then broadcast to agents
-                    send_message_toMyGroup_Agent(p_message, p_isBinary, p_ws);
-                }
-                else
-                {
-                    send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws);
-                }
+
+                send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws);
+                
                 
             }
             catch (e)
@@ -578,7 +581,6 @@ function fn_onConnect_Handler(p_ws,p_req)
             
         }
     }
-
 
     function fn_onWsMessage (p_msg)
     {
