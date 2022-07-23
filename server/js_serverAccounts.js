@@ -37,7 +37,7 @@ AccountsMaster.prototype.getUnitCount = function ()
 };
 
 
-AccountsMaster.prototype.fn_fn_add_member_toGroup = function (p_unitname,p_groupname,p_websocket) 
+AccountsMaster.prototype.fn_add_member_toGroup = function (p_unitname,p_groupname,p_websocket) 
 {
     var id  = p_websocket.m_andruavParams.SID;
     var acc; 
@@ -54,7 +54,7 @@ AccountsMaster.prototype.fn_fn_add_member_toGroup = function (p_unitname,p_group
          acc = this._accounts[id] = new Account(id);
     }
 
-    return acc.fn_fn_add_member_toGroup (p_unitname,p_groupname,p_websocket);
+    return acc.fn_add_member_toGroup (p_unitname,p_groupname,p_websocket);
 }
 
 
@@ -76,13 +76,13 @@ AccountsMaster.prototype.del_member_fromGroup = function (p_websocket)
         return ;
     }
     
-   return p_websocket.group.fn_fn_deleteMemberByName(p_websocket.name);
+   return p_websocket.group.fn_deleteMemberByName(p_websocket.name);
 
 }
 
 
 
-AccountsMaster.prototype.fn_fn_fn_del_member_fromAccountByName = function (p_unitname, accountID,terminateSocket)
+AccountsMaster.prototype.fn_del_member_fromAccountByName = function (p_unitname, accountID,terminateSocket)
 {
    
   var acc = this._accounts[accountID];
@@ -95,7 +95,7 @@ AccountsMaster.prototype.fn_fn_fn_del_member_fromAccountByName = function (p_uni
       return ;
   }
 
-  acc.fn_fn_fn_del_member_fromAccountByName (p_unitname,terminateSocket);
+  acc.fn_del_member_fromAccountByName (p_unitname,terminateSocket);
 
 }
 
@@ -132,7 +132,7 @@ function Account (id)
  * Account/Group are created if any not existed.
  * Returns: true/false
  ***/
-Account.prototype.fn_fn_add_member_toGroup = function (p_unitname,p_groupname,p_websocket)
+Account.prototype.fn_add_member_toGroup = function (p_unitname,p_groupname,p_websocket)
 {
     var gr;
     if (this._groups.hasOwnProperty(p_groupname))
@@ -156,11 +156,11 @@ Account.prototype.fn_fn_add_member_toGroup = function (p_unitname,p_groupname,p_
 /***
  * Searchs in all groups and remove all sockets with that name.
  ***/
-Account.prototype.fn_fn_fn_del_member_fromAccountByName = function (p_unitname, terminateSocket)
+Account.prototype.fn_del_member_fromAccountByName = function (p_unitname, terminateSocket)
 {
     this.forEach (function (group)
     {
-        group.fn_fn_deleteMemberByName (p_unitname,terminateSocket);    
+        group.fn_deleteMemberByName (p_unitname,terminateSocket);    
     });
 }
 
@@ -246,14 +246,14 @@ Group.prototype.deleteMember = function (p_websocket)
 /***
  * Deletes sockets with a given name. even if socket is not the same instance.
  ***/
-Group.prototype.fn_fn_deleteMemberByName = function (p_unitname,terminateSocket)
+Group.prototype.fn_deleteMemberByName = function (p_unitname,terminateSocket)
 {
     try
     {
         if (this._units.hasOwnProperty(p_unitname))
         {
 
-            consoleLog ("fn_fn_deleteMemberByName: deleteMember " + p_unitname);
+            consoleLog ("fn_deleteMemberByName: deleteMember " + p_unitname);
     
 
             // this is a socket under the same name 
@@ -263,7 +263,7 @@ Group.prototype.fn_fn_deleteMemberByName = function (p_unitname,terminateSocket)
             if (terminateSocket==true)
             {
 
-                consoleLog ("fn_fn_deleteMemberByName: terminateSocket " + p_unitname);
+                consoleLog ("fn_deleteMemberByName: terminateSocket " + p_unitname);
     
 
                 oldSocket.fn_register_db(oldSocket);
@@ -321,7 +321,7 @@ Group.prototype.fn_sendToIndividual = function(message, v_isBinary, target)
                         
                         try
                         {
-                            socket.group.fn_fn_deleteMemberByName (socket.name);
+                            socket.group.fn_deleteMemberByName (socket.name);
                
                             consoleLog ('unit' + socket.Name + ' found dead');
                             /////////fn_register_db(oldSocket);
@@ -373,7 +373,7 @@ Group.prototype.fn_broadcast = function(message, v_isBinary, ws)
                         
                 try
                 {
-                    socket.group.fn_fn_deleteMemberByName (socket.name);
+                    socket.group.fn_deleteMemberByName (socket.name);
                
                     consoleLog ('unit' + socket.Name + ' found dead');
                     /////////fn_register_db(oldSocket);
