@@ -163,7 +163,7 @@ function fn_onConnect_Handler(p_ws,p_req)
         if (!m_waitingAccounts.hasOwnProperty (v_loginTempKey))
         {
             // UNAUTHERIZED LOGIN or REPATED Login with same Key .. close the connection.
-            console.log ("debug INVALIS v_loginTempKey .." + v_loginTempKey )
+            console.log ("debug INVALID v_loginTempKey .." + v_loginTempKey )
 
             c_WS.close();
             
