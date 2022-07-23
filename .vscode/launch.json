@@ -8,6 +8,7 @@
         {
             "type": "node",
             "request": "launch",
+            "runtimeExecutable": "/home/mhefny/.nvm/versions/node/v16.16.0/bin/node",
             "name": "Home Program",
             "program": "${workspaceRoot}/server.js",
             "args": ["--config=server.home.config"]
@@ -15,6 +16,7 @@
         {
             "type": "node",
             "request": "launch",
+            "runtimeExecutable": "/home/mhefny/.nvm/versions/node/v16.16.0/bin/node",
             "name": "Home Vodafone",
             "program": "${workspaceRoot}/server.js",
             "args": ["--config=server.home.vodafone.config"]
@@ -23,6 +25,7 @@
         {
             "type": "node",
             "request": "launch",
+            "runtimeExecutable": "/home/mhefny/.nvm/versions/node/v16.16.0/bin/node",
             "name": "Production Program",
             "program": "${workspaceRoot}/server.js",
             "args": ["--config=server.config"]
