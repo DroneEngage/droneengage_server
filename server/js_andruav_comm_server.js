@@ -168,6 +168,10 @@ function fn_startServer ()
         console.log (global.Colors.BFgYellow + "ATTENTION!!  SECURITY RISK . NODE_TLS_REJECT_UNAUTHORIZED = 0" + global.Colors.Reset);
 
         process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
+    } 
+    else if (global.m_serverconfig.m_configuration.ca_cert_path ===true)
+    {
+        process.env["NODE_EXTRA_CA_CERTS"] = global.m_serverconfig.m_configuration.ca_cert_path;
     }
 
     
