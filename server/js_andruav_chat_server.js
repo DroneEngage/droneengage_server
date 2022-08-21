@@ -251,16 +251,15 @@ function fn_onConnect_Handler(p_ws,p_req)
             try
             {
                 // ROUTING LOGIC:
-                // 1- Target is GCS regardless who the sender is.
-                // 2-
+                // 1- Sender is Agent:
                 //  a. Sender is an agent with null target means [broadcast] cannot broadcast to another agent.
                 //  b. Sender is an agent with _GD_ target means [broadcast] to all including other drones.
-                // 3- GCS Logic:
-                // 3-a. GCS has no target then send to ALL AGENTS & GCS.
-                // 3-b. GCS specifies AGENTS as target.
-                // 4- one-to-one message as target not a reserved word.
+                // 2- GCS Logic:
+                //   a. GCS has no target then send to ALL AGENTS & GCS.
+                //   b. GCS specifies AGENTS as target.
+                // 3- one-to-one message as target not a reserved word.
 
-                if (v_jmsg.hasOwnProperty('tg')===true)
+                if ((v_jmsg.hasOwnProperty('tg')===true) && (v_jmsg['tg'].length>0))
                 {
                     switch (v_jmsg['tg'])
                     {
@@ -299,9 +298,6 @@ function fn_onConnect_Handler(p_ws,p_req)
                     send_message_toMyGroup (p_message, p_isBinary, p_ws);
                     break;
                 }
-
-                
-                
             }
             catch (e)
             {
