@@ -58,6 +58,7 @@ exports.CONST_TYPE_AndruavSystem_DisableTasks	        = 9004;
 exports.CONST_TYPE_AndruavSystem_Ping                   = 9005;
 exports.CONST_TYPE_AndruavSystem_LogoutCommServer       = 9006;
 exports.CONST_TYPE_AndruavSystem_ConnectedCommServer    = 9007;
+exports.CONST_TYPE_AndruavSystem_UdpProxy               = 9008;
 
 // Validation
 exports.CONST_ACCESSCODE_MAX_LENGTH = 200;

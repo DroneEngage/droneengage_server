@@ -11,7 +11,7 @@ const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
 const c_CommServerManagerClient = require("./js_comm_server_manager_client");
 const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
-
+const m_activeUdpProxy = {};
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 60000; //5000;
 
 var v_andruavTasks;
@@ -311,6 +311,69 @@ function fn_onConnect_Handler(p_ws,p_req)
                 {
                     switch (v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID])
                     {
+                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy:
+                            if (c_WS.m_loginRequest.m_actorType!=='d') 
+                            {
+                                // only vehicle can create udp proxy
+                                return ;
+                            }
+                            if (v_jmsg.ms.en === true)
+                            {
+                                if ((!m_activeUdpProxy.hasOwnProperty(v_jmsg.sd)) || (m_activeUdpProxy[v_jmsg.sd]==null))
+                                {  // create udp proxy nad send back status
+                                    
+                                    let udp = require ('./js_udp_proxy.js');
+                                    var obj = {};
+                                    m_activeUdpProxy[v_jmsg.sd] = obj;
+                                    obj.created = Date.now();
+                                    obj.last_access = Date.now();
+                                    obj.m_udpproxy = new udp.udp_proxy("0.0.0.0",0,"0.0.0.0",0, function ()
+                                    {
+                                        v_jmsg.ms = obj.m_udpproxy.getConfig();
+                                        v_jmsg.ms.en = true;
+                                        v_jmsg.ty = 'i'; // individual p_message
+                                        v_jmsg.tg = v_jmsg.sd; // sender = target
+                                        v_jmsg.sd = '_SYS_';
+                                        c_WS.send(JSON.stringify(v_jmsg));
+                                    });
+                                }
+                                else
+                                {
+                                    // resend current sockets status
+                                    // note that this function cannot be called after creating m_udpproxy as sockets inside are async.
+                                    m_activeUdpProxy[v_jmsg.sd].last_access = Date.now();
+                                    v_jmsg.ms = m_activeUdpProxy[v_jmsg.sd].m_udpproxy.getConfig();
+                                    v_jmsg.ms.en = true;
+                                    v_jmsg.ty = 'i'; // individual p_message
+                                    v_jmsg.tg = v_jmsg.sd; // sender = target
+                                    v_jmsg.sd = '_SYS_';
+                                    c_WS.send(JSON.stringify(v_jmsg));
+                                }
+                            } else 
+                            if (v_jmsg.ms.en === false)
+                            {
+                                if (m_activeUdpProxy.hasOwnProperty(v_jmsg.sd))
+                                {
+                                    v_jmsg.ms = m_activeUdpProxy[v_jmsg.sd].m_udpproxy.getConfig();
+                                    m_activeUdpProxy[v_jmsg.sd].m_udpproxy.close();
+                                    m_activeUdpProxy[v_jmsg.sd] = null;
+                                }
+                                else
+                                {
+                                    v_jmsg.ms = {
+                                        'socket1': {'address':'0.0.0.0', 'port':0},
+                                        'socket2': {'address':'0.0.0.0', 'port':0}
+                                    };
+                                }
+                                v_jmsg.ms.en = false;
+                                v_jmsg.ty = 'i'; // individual p_message
+                                v_jmsg.tg = v_jmsg.sd; // sender = target
+                                v_jmsg.sd = '_SYS_';
+                                
+                                c_WS.send(JSON.stringify(v_jmsg));
+                            }
+                            break;
+
                         case c_CONSTANTS.CONST_TYPE_AndruavSystem_Ping:
                             v_jmsg.ms.s = 'OK:pong';
                             c_WS.send(JSON.stringify(v_jmsg));
@@ -347,7 +410,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
                                           v_jmsg.tg = v_jmsg.sd; // sender = target
-                                          v_jmsg.sd = '_sys_';
+                                          v_jmsg.sd = '_SYS_';
                                           //c_dumpError.fn_dumpdebug (JSON.stringify(res[0].task));
                                           //c_dumpError.fn_dumpdebug (JSON.stringify(res[1].task));
                                           for (var i = 0; i < res.length; i++)
@@ -413,7 +476,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
                                           v_jmsg.tg = v_jmsg.sd; // sender = target
-                                          v_jmsg.sd = '_sys_';
+                                          v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
                                           v_jmsg.ms = "Done";
                                           c_WS.send(JSON.stringify(v_jmsg));
@@ -474,7 +537,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
                                           v_jmsg.tg = v_jmsg.sd; // sender = target
-                                          v_jmsg.sd = '_sys_';
+                                          v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = '9003';
                                           v_jmsg.ms = "Done";
                                           c_WS.send(JSON.stringify(v_jmsg));
@@ -535,7 +598,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.affectedRows);
                                           v_jmsg.ty = 'i'; // individual p_message
                                           v_jmsg.tg = v_jmsg.sd; // sender = target
-                                          v_jmsg.sd = '_sys_';
+                                          v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = '9003';
                                           v_jmsg.ms = "Done";
                                           c_WS.send(JSON.stringify(v_jmsg));
