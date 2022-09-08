@@ -195,7 +195,11 @@ function fn_onConnect_Handler(p_ws,p_req)
         {
             
             p_ws.m_status.m_BTX += p_message.length;
-            p_ws.m__group.m_BTX += p_message.length;
+            if (p_ws.m__group != null)
+            {
+               p_ws.m__group.m_BTX += p_message.length;
+               p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
+            }
 
             var bytes = [];
             for (var i = 0; i < p_message.length; ++i)
@@ -225,6 +229,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             if (p_ws.m__group != null)
             {
                 p_ws.m__group.m_TTX += p_message.length;
+                p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
             }
             try
             {
@@ -236,8 +241,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
         }
 
-        p_ws.m__group.m_lastAccessTime = Date.now();
-
+        
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING])
         {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
@@ -682,6 +686,7 @@ function fn_onConnect_Handler(p_ws,p_req)
         {
             delete m_activeSenderIDsList[p_ws.m_loginRequest.m_senderID];
             c_CommServerManagerClient.fn_onMessageOpened();
+            // I do not clear m_activeUdpProxy here to reduce chance of changing port because of temp disconnection.
         }
     }
 
