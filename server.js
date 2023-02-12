@@ -18,6 +18,7 @@ let m_andruav_comm_server = require ('./server/js_andruav_comm_server.js')
 
 
 process.on('SIGINT', function() {
+    if (global.m_logger) global.m_logger.Warn('SIGINT.');
     process.exit(0);
 });
 
@@ -41,6 +42,42 @@ function fn_displayInfo ()
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
     console.log ("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + " port: " + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + " port: " + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
+    if (global.m_serverconfig.m_configuration.ignoreLog!==false)
+    {
+        console.log ("logging is " + global.Colors.FgYellow + 'disabled' + global.Colors.Reset);
+    }
+    else
+    {
+
+        global.m_logger         = require ('node-file-logger');
+
+        const options = {
+            timeZone: global.m_serverconfig.m_configuration.log_timeZone==null?'GMT':global.m_serverconfig.m_configuration.log_timeZone,      
+            folderPath: global.m_serverconfig.m_configuration.log_directory==null?'./log':global.m_serverconfig.m_configuration.log_directory,      
+            dateBasedFileNaming: true,
+            // Required only if dateBasedFileNaming is set to false
+            fileName: 'All_Logs',   
+            // Required only if dateBasedFileNaming is set to true
+            fileNamePrefix: 'Logs_',
+            fileNameSuffix: '',
+            fileNameExtension: '.log',     
+            
+            dateFormat: 'YYYY-MM-DD',
+            timeFormat: 'HH:mm:ss.SSS',
+            // Allowed values - debug, prod, prod-trace (Details below)
+            // prod: Only 'warn', 'info', 'error' and 'fatal' messages are logged. 'debug' and 'trace' messages are not logged.
+            logLevel: global.m_serverconfig.m_configuration.log_detailed==true?'debug':'prod',
+            // If set to false then messages are logged to console as well
+            onlyFileLogging: true
+          };
+        
+        global.m_logger.SetUserOptions(options); 
+
+        console.log ("logging is " + global.Colors.FgYellow + 'enabled' + global.Colors.Reset);
+
+        if (global.m_logger) global.m_logger.Info('System Started.');
+    }
+    
     console.log ("Datetime: %s", new Date());
     console.log ("==================================");
 }

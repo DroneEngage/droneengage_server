@@ -125,6 +125,8 @@ function fn_onConnect_Handler(p_ws,p_req)
     const c_params = getHeaderParams(p_req.url);
     var v_loginTempKey;
 
+    if (global.m_logger) global.m_logger.Info('WS Created from Party','fn_onConnect_Handler',null,c_params);
+
     /**
      * key is valid. mainly used so that onClose event can tell the reason of closing.
      * otherwise fn_validateKey return value would be enough.
@@ -142,6 +144,7 @@ function fn_onConnect_Handler(p_ws,p_req)
         const c_PARAM_LENGTH = 200;
         if (p_params == null )
         {
+            if (global.m_logger) global.m_logger.Warn('Party tried to login using no credentials','fn_validateKey',null,p_params);
             return false;
         }
         
@@ -155,6 +158,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             if ((v_loginTempKey.fn_isAlphanumeric() !== true) || (v_loginTempKey.length > c_PARAM_LENGTH))
             {
                 c_WS.close();
+                if (global.m_logger) global.m_logger.Warn('Party tried to login using bad credentials','fn_validateKey',null,p_params);
                 return false;
             }
         }
@@ -166,7 +170,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             console.log ("debug INVALID v_loginTempKey .." + v_loginTempKey )
 
             c_WS.close();
-            
+            if (global.m_logger) global.m_logger.Warn('Party failed to login','fn_validateKey',null,p_params);
             return false;
         }
         else
@@ -174,7 +178,8 @@ function fn_onConnect_Handler(p_ws,p_req)
             
             console.log ("debug valid v_loginTempKey .." + v_loginTempKey )
             v_validKey = true;
-            
+            if (global.m_logger) global.m_logger.Info('Party successfully login','fn_validateKey',null,p_params);
+
             return true;
         }
         
@@ -306,6 +311,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             catch (e)
             {
                 c_dumpError.fn_dumperror(e);
+                if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL','fn_parseMessage',null,e);
             }
             break;
 
@@ -649,6 +655,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 catch (e)
                 {
                     c_dumpError.fn_dumperror(e);
+                    if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_SYSTEM','fn_parseMessage',null,e);
                 }
             }
             break;
@@ -662,10 +669,8 @@ function fn_onConnect_Handler(p_ws,p_req)
         var v_isBinary = false;
         if (typeof(p_msg) !== 'string')
         {
-            //console.log("binary");
             v_isBinary = true;
         }
-        //console.log(message);
         fn_parseMessage(this, p_msg, v_isBinary);    
     }
 
@@ -694,7 +699,7 @@ function fn_onConnect_Handler(p_ws,p_req)
     function fn_onWsError (p_err)
     {
         console.log ("debug ... fn_onWsError err: " + p_err);
-
+        if (global.m_logger) global.m_logger.Error('Party WS Error','fn_onWsError',null,p_err);
     }
 
     function fn_onWsUpgrade (r)
@@ -777,6 +782,7 @@ function fn_onConnect_Handler(p_ws,p_req)
         {
             // exception handling to be removed.
             console.log ("TEMP DEBUG EXCEPTION ... Ex:" + JSON.stringify(ex));
+            if (global.m_logger) global.m_logger.Error('Party WS Error','fn_onConnect_Handler',null,ex);
         }
     }
     else

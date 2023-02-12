@@ -169,6 +169,7 @@ function fn_startServer ()
         // ATTENTION: should be FALSE in PRODUCTION
         // skip verifying fake SSL
         console.log (global.Colors.BFgYellow + "ATTENTION!!  SECURITY RISK . NODE_TLS_REJECT_UNAUTHORIZED = 0" + global.Colors.Reset);
+        console.log (global.Colors.BFgYellow + "THIS IS ACCEPTED ONLY IF COMM with ANDRUAV_AUTH is 127.0.0.1" + global.Colors.Reset);
 
         process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = 0;
     } 
