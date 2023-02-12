@@ -3,4 +3,7 @@ node_modules/
 package-lock.json
 
 /server/ssl/*
+/log
+*.log
+
 

@@ -26,6 +26,7 @@
     "lodash": "^4.17.15",
     "moment": "^2.15.0",
     "mysql2": "^2.3.2",
+    "node-file-logger": "^0.9.5",
     "qs": "^6.9.4",
     "randomstring": "^1.1.5",
     "udp-packet": "^1.0.0",
