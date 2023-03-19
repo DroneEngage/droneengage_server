@@ -329,12 +329,13 @@ function fn_onConnect_Handler(p_ws,p_req)
                             }
                             if (v_jmsg.ms.en === true)
                             {
-                                if ((!m_activeUdpProxy.hasOwnProperty(v_jmsg.sd)) || (m_activeUdpProxy[v_jmsg.sd]==null))
+                                //if ((!m_activeUdpProxy.hasOwnProperty(v_jmsg.sd)) || (m_activeUdpProxy[v_jmsg.sd]==null))
+                                if ((!m_activeUdpProxy.hasOwnProperty(p_ws.name)) || (m_activeUdpProxy[p_ws.name]==null))
                                 {  // create udp proxy nad send back status
                                     
                                     let udp = require ('./js_udp_proxy.js');
                                     var obj = {};
-                                    m_activeUdpProxy[v_jmsg.sd] = obj;
+                                    m_activeUdpProxy[p_ws.name] = obj;
                                     obj.created = Date.now();
                                     obj.last_access = Date.now();
                                     obj.m_udpproxy = new udp.udp_proxy("0.0.0.0",0,"0.0.0.0",0, function ()
@@ -342,7 +343,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                         v_jmsg.ms = obj.m_udpproxy.getConfig();
                                         v_jmsg.ms.en = true;
                                         v_jmsg.ty = 'i'; // individual p_message
-                                        v_jmsg.tg = v_jmsg.sd; // sender = target
+                                        v_jmsg.tg = p_ws.name; // sender = target
                                         v_jmsg.sd = '_SYS_';
                                         c_WS.send(JSON.stringify(v_jmsg));
                                     });
@@ -351,22 +352,22 @@ function fn_onConnect_Handler(p_ws,p_req)
                                 {
                                     // resend current sockets status
                                     // note that this function cannot be called after creating m_udpproxy as sockets inside are async.
-                                    m_activeUdpProxy[v_jmsg.sd].last_access = Date.now();
-                                    v_jmsg.ms = m_activeUdpProxy[v_jmsg.sd].m_udpproxy.getConfig();
+                                    m_activeUdpProxy[p_ws.name].last_access = Date.now();
+                                    v_jmsg.ms = m_activeUdpProxy[p_ws.name].m_udpproxy.getConfig();
                                     v_jmsg.ms.en = true;
                                     v_jmsg.ty = 'i'; // individual p_message
-                                    v_jmsg.tg = v_jmsg.sd; // sender = target
+                                    v_jmsg.tg = p_ws.name; // sender = target
                                     v_jmsg.sd = '_SYS_';
                                     c_WS.send(JSON.stringify(v_jmsg));
                                 }
                             } else 
                             if (v_jmsg.ms.en === false)
                             {
-                                if (m_activeUdpProxy.hasOwnProperty(v_jmsg.sd))
+                                if (m_activeUdpProxy.hasOwnProperty(p_ws.name))
                                 {
-                                    v_jmsg.ms = m_activeUdpProxy[v_jmsg.sd].m_udpproxy.getConfig();
-                                    m_activeUdpProxy[v_jmsg.sd].m_udpproxy.close();
-                                    m_activeUdpProxy[v_jmsg.sd] = null;
+                                    v_jmsg.ms = m_activeUdpProxy[p_ws.name].m_udpproxy.getConfig();
+                                    m_activeUdpProxy[p_ws.name].m_udpproxy.close();
+                                    m_activeUdpProxy[p_ws.name] = null;
                                 }
                                 else
                                 {
@@ -377,7 +378,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                 }
                                 v_jmsg.ms.en = false;
                                 v_jmsg.ty = 'i'; // individual p_message
-                                v_jmsg.tg = v_jmsg.sd; // sender = target
+                                v_jmsg.tg = p_ws.name; // sender = target
                                 v_jmsg.sd = '_SYS_';
                                 
                                 c_WS.send(JSON.stringify(v_jmsg));
@@ -419,7 +420,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           // data found
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = v_jmsg.sd; // sender = target
+                                          v_jmsg.tg = p_ws.name; // sender = target
                                           v_jmsg.sd = '_SYS_';
                                           //c_dumpError.fn_dumpdebug (JSON.stringify(res[0].task));
                                           //c_dumpError.fn_dumpdebug (JSON.stringify(res[1].task));
@@ -485,7 +486,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           // data found
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = v_jmsg.sd; // sender = target
+                                          v_jmsg.tg = p_ws.name; // sender = target
                                           v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
                                           v_jmsg.ms = "Done";
@@ -546,7 +547,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           // data found
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
                                           v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = v_jmsg.sd; // sender = target
+                                          v_jmsg.tg = p_ws.name; // sender = target
                                           v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = '9003';
                                           v_jmsg.ms = "Done";
@@ -607,7 +608,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                           // data found
                                           c_dumpError.fn_dumpdebug("Rows Length:" + res.affectedRows);
                                           v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = v_jmsg.sd; // sender = target
+                                          v_jmsg.tg = p_ws.name; // sender = target
                                           v_jmsg.sd = '_SYS_';
                                           v_jmsg.mt = '9003';
                                           v_jmsg.ms = "Done";
