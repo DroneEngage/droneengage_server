@@ -252,7 +252,13 @@ function fn_onConnect_Handler(p_ws,p_req)
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
                 //xconsole.log ('send to group');
                 // send to group
-                send_message_toMyGroup(p_message, p_isBinary, p_ws);
+                if (p_ws.m_loginRequest.m_actorType=='g') {
+                    send_message_toMyGroup(p_message, p_isBinary, p_ws);
+                }
+                else
+                {
+                    send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                }
 
             break;
             
