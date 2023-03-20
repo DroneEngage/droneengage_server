@@ -416,8 +416,9 @@ Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
         {
             var socket = this.m_units[keys[i]];
             
-            // do not send back to yourself.
-            if ((socket.m_loginRequest.m_senderID != sender_id)) 
+            // do not send back to yourself or non drones.
+            if ((socket.m_loginRequest.m_actorType === 'd')
+            && (socket.m_loginRequest.m_senderID != sender_id)) 
             {
                 socket.send(p_message,
                 {
@@ -465,14 +466,14 @@ Group.prototype.broadcast = function(p_message, p_isbinary, c_ws)
     {
          try
         {
-            var c_targetSocket = this.m_units[keys[i]];
+            var socket = this.m_units[keys[i]];
 
             // do not send back to yourself.
-            if ((c_targetSocket.m_loginRequest.m_senderID != sender_id)) 
+            if ((socket.m_loginRequest.m_senderID != sender_id)) 
             {
                 //xconsoleLog ('func: send message to %s' ,value.Name);
 
-                c_targetSocket.send(p_message,
+                socket.send(p_message,
                 {
                     binary: p_isbinary
                 });
