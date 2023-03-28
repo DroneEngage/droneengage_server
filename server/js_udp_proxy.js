@@ -137,18 +137,7 @@
          this._udp_socket1 = new udp_socket(host1,port1, this.udp2_onreceive, this);
          this._udp_socket2 = new udp_socket(host2,port2, this.udp1_onreceive, this);
  
-         //this.m_watchdog = setInterval (this.checkIdle, 20000, this);
      }
- 
-     // checkIdle(Me)
-     // {
-     //     const now = Date.now();
-     //     if (((now - Me._udp_socket1.getLastAccessTime()) > 20000)
-     //         || (now - Me._udp_socket2.getLastAccessTime()) > 20000)
-     //     {
-     //         Me.close(Me);
-     //     }
-     // }
  
      _onReady(Me, status)
      {
@@ -163,7 +152,6 @@
      {
          this._udp_socket1.close();
          this._udp_socket2.close();
-         //clearInterval(Me.m_watchdog);
      }
  
      getConfig()
@@ -194,10 +182,77 @@
     
  }
  
+
+
+ const m_activeUdpProxy = {};
+
+
+ function closeUDPSocket (name, callback)
+ {
+    var ms = {};
+    if (m_activeUdpProxy.hasOwnProperty(name))
+    {
+        ms = m_activeUdpProxy[name].m_udpproxy.getConfig();
+        m_activeUdpProxy[name].m_udpproxy.close();
+        m_activeUdpProxy[name] = null;
+    }
+    else
+    {
+        ms = {
+            'socket1': {'address':'0.0.0.0', 'port':0},
+            'socket2': {'address':'0.0.0.0', 'port':0}
+        };
+    }
+
+    ms.en = false;
+
+    callback(ms);
+ }
+
+ 
+ function getUDPSocket (name, socket1, socket2, callback)
+    {
+        if ((!m_activeUdpProxy.hasOwnProperty(name)) || (m_activeUdpProxy[name]==null))
+        {   // new socket
+            var obj = {};
+            obj.created = Date.now();
+            obj.last_access = Date.now();
+            m_activeUdpProxy[name] = obj;
+            
+            obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port,"0.0.0.0", socket2.port, function ()
+            {
+                var ms = obj.m_udpproxy.getConfig();
+                ms.en = true;
+                callback(ms);
+            }); 
+        }
+        else
+        {
+            var ms = m_activeUdpProxy[name].m_udpproxy.getConfig();
+
+            if (((socket1.port ==0) || (ms.socket1.port == socket1.port)) && ((socket2.port ==0 ) || (ms.socket2.port == socket2.port)))
+            {  // same socket same configuration.
+                ms.last_access = Date.now();
+                ms.en = true;
+                callback(ms);
+            }
+            else
+            {
+                closeUDPSocket (name, function ()
+                {
+                    getUDPSocket (name, socket1, socket2, callback);
+                });
+            }
+        }
+    }
+ 
+
  module.exports = 
  {
      udp_socket,
-     udp_proxy
+     udp_proxy,
+     getUDPSocket,
+     closeUDPSocket
  }
  
  
