@@ -1,7 +1,7 @@
 downloads/
 node_modules/
 package-lock.json
-
+server.home.config
 /server/ssl/*
 /log
 *.log
