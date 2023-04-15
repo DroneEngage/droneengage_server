@@ -338,6 +338,12 @@ function fn_onConnect_Handler(p_ws,p_req)
                                 
                             if (v_jmsg.ms.en === true)
                             {
+                                if (global.m_serverconfig.m_configuration.allow_udpproxy_fixed_port !== true)
+                                {
+                                    v_jmsg.ms.socket1.port = 0;
+                                    v_jmsg.ms.socket2.port = 0;
+                                }
+
                                 udp.getUDPSocket(p_ws.name,v_jmsg.ms.socket1,v_jmsg.ms.socket2, function (ms)
                                 {
                                     v_jmsg.ms = ms;
