@@ -339,50 +339,37 @@ function fn_onConnect_Handler(p_ws,p_req)
                             if (v_jmsg.ms.en === true)
                             {
                                 if (global.m_serverconfig.m_configuration.allow_udpproxy_fixed_port !== true)
-                                {
+                                {   // unit cannot determine port numbers if allow_udpproxy_fixed_port != true.
                                     v_jmsg.ms.socket1.port = 0;
                                     v_jmsg.ms.socket2.port = 0;
                                 }
 
                                 udp.getUDPSocket(p_ws.name,v_jmsg.ms.socket1,v_jmsg.ms.socket2, function (ms)
                                 {
-                                    v_jmsg.ms = ms;
-                                    v_jmsg.ty = 'i'; // individual p_message
-                                    v_jmsg.tg = p_ws.name; // sender = target
-                                    v_jmsg.sd = '_SYS_';
-                                    c_WS.send(JSON.stringify(v_jmsg));
+                                    if (ms.en === false)    
+                                    {
+                                        v_jmsg.ms.socket1.port = 0;
+                                        v_jmsg.ms.socket2.port = 0;
+
+                                        udp.closeUDPSocket(p_ws.name, function (ms)
+                                        {
+                                            v_jmsg.ms = ms;
+                                            v_jmsg.ty = 'i'; // individual p_message
+                                            v_jmsg.tg = p_ws.name; // sender = target
+                                            v_jmsg.sd = '_SYS_';
+                                            c_WS.send(JSON.stringify(v_jmsg));
+                                        });
+                                        
+
+                                    }else
+                                    {
+                                        v_jmsg.ms = ms;
+                                        v_jmsg.ty = 'i'; // individual p_message
+                                        v_jmsg.tg = p_ws.name; // sender = target
+                                        v_jmsg.sd = '_SYS_';
+                                        c_WS.send(JSON.stringify(v_jmsg));
+                                    }
                                 });
-                                // if ((!m_activeUdpProxy.hasOwnProperty(p_ws.name)) || (m_activeUdpProxy[p_ws.name]==null))
-                                // {  // create udp proxy nad send back status
-                                    
-                                //     let udp = require ('./js_udp_proxy.js');
-                                //     var obj = {};
-                                //     m_activeUdpProxy[p_ws.name] = obj;
-                                //     obj.created = Date.now();
-                                //     obj.last_access = Date.now();
-                                //     obj.m_udpproxy = new udp.udp_proxy("0.0.0.0",v_jmsg.ms.socket1.port,"0.0.0.0",v_jmsg.ms.socket2.port, function ()
-                                //     {
-                                //         v_jmsg.ms = obj.m_udpproxy.getConfig();
-                                //         v_jmsg.ms.en = true;
-                                //         //v_jmsg.ms = ms;
-                                //         v_jmsg.ty = 'i'; // individual p_message
-                                //         v_jmsg.tg = p_ws.name; // sender = target
-                                //         v_jmsg.sd = '_SYS_';
-                                //         c_WS.send(JSON.stringify(v_jmsg));
-                                //     });
-                                // }
-                                // else
-                                // {
-                                //     // resend current sockets status
-                                //     // note that this function cannot be called after creating m_udpproxy as sockets inside are async.
-                                //     m_activeUdpProxy[p_ws.name].last_access = Date.now();
-                                //     v_jmsg.ms = m_activeUdpProxy[p_ws.name].m_udpproxy.getConfig();
-                                //     v_jmsg.ms.en = true;
-                                //     v_jmsg.ty = 'i'; // individual p_message
-                                //     v_jmsg.tg = p_ws.name; // sender = target
-                                //     v_jmsg.sd = '_SYS_';
-                                //     c_WS.send(JSON.stringify(v_jmsg));
-                                // }
                             } else 
                             if (v_jmsg.ms.en === false)
                             {
@@ -394,25 +381,6 @@ function fn_onConnect_Handler(p_ws,p_req)
                                     v_jmsg.sd = '_SYS_';
                                     c_WS.send(JSON.stringify(v_jmsg));
                                 });
-                                // if (m_activeUdpProxy.hasOwnProperty(p_ws.name))
-                                // {
-                                //     v_jmsg.ms = m_activeUdpProxy[p_ws.name].m_udpproxy.getConfig();
-                                //     m_activeUdpProxy[p_ws.name].m_udpproxy.close();
-                                //     m_activeUdpProxy[p_ws.name] = null;
-                                // }
-                                // else
-                                // {
-                                //     v_jmsg.ms = {
-                                //         'socket1': {'address':'0.0.0.0', 'port':0},
-                                //         'socket2': {'address':'0.0.0.0', 'port':0}
-                                //     };
-                                // }
-                                // v_jmsg.ms.en = false;
-                                // v_jmsg.ty = 'i'; // individual p_message
-                                // v_jmsg.tg = p_ws.name; // sender = target
-                                // v_jmsg.sd = '_SYS_';
-                                
-                                // c_WS.send(JSON.stringify(v_jmsg));
                             }
                             break;
 
