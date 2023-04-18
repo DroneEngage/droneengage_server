@@ -49,12 +49,22 @@
 
          this._server.on('error', function (err)
          {
+            if (err.code == 'EADDRINUSE')
+            {
+                console.log('UDP Listener Cannot Open ' + Me._host + ' at port ' + Me._port);
+                Me._isReady = false;
+                Me.parent._onReady(Me.parent, Me._isReady);
+            }
             console.log ("socket error:" + err);
          });
         
          try
          {
-            this._server.bind(port, host);
+            this._server.bind({
+                'address': host,
+                'port': port,
+                'exclusive': true
+              });
          }
          catch 
          {
@@ -128,7 +138,8 @@
      {
          this._callback = callback;
          this._ready_counter = 0;
- 
+         this._ready_proxy = true;   
+
          host1=host1==null?"0.0.0.0":host1;
          port1=port1==null?0:port1;
          host2=host2==null?"0.0.0.0":host2;
@@ -141,11 +152,12 @@
  
      _onReady(Me, status)
      {
-         Me._ready_counter +=1;
-         if (Me._ready_counter==2)
-         {
-             this._callback();
-         }
+        this._ready_proxy = this._ready_proxy && status;
+        Me._ready_counter +=1;
+        if (Me._ready_counter==2)
+        {
+            this._callback(this._ready_proxy);
+        }
      }
  
      close()
@@ -219,15 +231,15 @@
             obj.last_access = Date.now();
             m_activeUdpProxy[name] = obj;
             
-            obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port,"0.0.0.0", socket2.port, function ()
+            obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port,"0.0.0.0", socket2.port, function (enabled)
             {
                 var ms = obj.m_udpproxy.getConfig();
-                ms.en = true;
+                ms.en = enabled;
                 callback(ms);
             }); 
         }
         else
-        {
+        {   // this unit has already a socket
             var ms = m_activeUdpProxy[name].m_udpproxy.getConfig();
 
             if (((socket1.port ==0) || (ms.socket1.port == socket1.port)) && ((socket2.port ==0 ) || (ms.socket2.port == socket2.port)))
@@ -237,10 +249,10 @@
                 callback(ms);
             }
             else
-            {
+            {   // close unit old socket 
                 closeUDPSocket (name, function ()
                 {
-                    getUDPSocket (name, socket1, socket2, callback);
+                    getUDPSocket (name, socket1, socket2, callback); // recursive to create a new one after deleting the current.
                 });
             }
         }
