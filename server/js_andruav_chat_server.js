@@ -9,6 +9,8 @@ const c_dumpError = require("../dumperror.js");
 const c_CONSTANTS = require ("../js_constants");
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
 const c_CommServerManagerClient = require("./js_comm_server_manager_client");
+const c_messages  = require("./js_andruavMessages.js");
+
 const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
 const m_activeUdpProxy = {};
@@ -239,6 +241,13 @@ function fn_onConnect_Handler(p_ws,p_req)
             try
             {
                 v_jmsg = JSON.parse(p_message); 
+                
+                if (p_ws.m_loginRequest.m_actorType=='g')
+                {   // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
+                    v_jmsg.p = p_ws.m_loginRequest.m_prm;
+                    p_message = JSON.stringify(v_jmsg);
+                }
+            
             }
             catch
             {
@@ -736,8 +745,9 @@ function fn_onConnect_Handler(p_ws,p_req)
                 c_onb.m_groupID      =  c_loginRequest[c_CONSTANTS.CONST_CS_GROUP_ID.toString()];
                 c_onb.m_requestID    =  c_loginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
                 c_onb.m_actorType    =  c_loginRequest[c_CONSTANTS.CONST_ACTOR_TYPE.toString()];
+                c_onb.m_prm          =  c_loginRequest[c_CONSTANTS.CONST_PERMISSION2.toString()];
                 c_onb.m_creationDate = Date.now();
-                c_onb.m_ws = p_ws ;
+                c_onb.m_ws = p_ws ;  // TODO: not used.. should be removed
                 
 
                 Object.seal(c_onb);

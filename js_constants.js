@@ -10,7 +10,8 @@ exports.CONST_DEVICE_FINGERPRINT            = 'fp';
 exports.CONST_SESSION_ID_PARAMETER          = 's';
 exports.CONST_PARTY_ID_PARAMETER            = 'p';
 exports.CONST_APK_FINGERPRINT_PARAMETER     = 'ak';
-exports.CONST_ACTOR_TYPE                    = 'at';   // isGCS
+exports.CONST_ACTOR_TYPE                    = 'at';    // isGCS
+exports.CONST_PERMISSION2                   = 'prm';   // verified 
 ////////////////EO-HTTP HEADER FIELDS
 
 
