@@ -197,7 +197,6 @@ function fn_onConnect_Handler(p_ws,p_req)
     function fn_parseMessage (p_ws, p_message, p_isBinary)
     {
         var v_jmsg = null;
-        var v_binaryIndex  =0;
         if (p_isBinary == true)
         {
             
@@ -208,19 +207,29 @@ function fn_onConnect_Handler(p_ws,p_req)
                p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
             }
 
-            var bytes = [];
-            for (var i = 0; i < p_message.length; ++i)
-            {   if (p_message[i] == 0)
-                {
-                    const c_buff = new Buffer.from(bytes);
-                    const c_str = c_buff.toString('utf8');
-                    v_jmsg = JSON.parse(c_str); 
-                    break;
-                }
-                bytes.push(p_message[i]);
-                ++v_binaryIndex;
+            const nullIndex = p_message.indexOf(0);
+            if (nullIndex !== -1) {
+                const c_buff = p_message.slice(0, nullIndex);
+                const c_str = c_buff.toString('utf8');
+                v_jmsg = JSON.parse(c_str);
+            }
+
+            if (v_jmsg == null)
+            {
+                // bug fix: sometimes text message is sent as binary althought it has no binary extension.
+                v_jmsg = JSON.parse(p_message);
                 
-            }   
+            }
+            else
+            {
+                // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
+                // reconstruct the binary packet
+                v_jmsg.p = p_ws.m_loginRequest.m_prm;
+                const v_jmsg_str = JSON.stringify(v_jmsg);
+                const v_jmsgBuffer = Buffer.from(v_jmsg_str, 'utf8');
+                p_message = Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
+            }
+            
         }
         else
         {
@@ -242,12 +251,9 @@ function fn_onConnect_Handler(p_ws,p_req)
             {
                 v_jmsg = JSON.parse(p_message); 
                 
-                if (p_ws.m_loginRequest.m_actorType=='g')
-                {   // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
-                    v_jmsg.p = p_ws.m_loginRequest.m_prm;
-                    p_message = JSON.stringify(v_jmsg);
-                }
-            
+                // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
+                v_jmsg.p = p_ws.m_loginRequest.m_prm;
+                p_message = JSON.stringify(v_jmsg);
             }
             catch
             {
