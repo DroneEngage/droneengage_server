@@ -37,11 +37,11 @@ function fn_displayHelp ()
 function fn_displayInfo ()
 {
     console.log ("==================================")
-    console.log (global.Colors.Bright + "Andruav Communication Server version " +  JSON.stringify(v_pjson.version) + global.Colors.Reset);
+    console.log (global.Colors.Bright + "DE Communication Server version " +  JSON.stringify(v_pjson.version) + global.Colors.Reset);
     console.log ("----------------------------------");
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
-    console.log ("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + " port: " + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
-    console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + " port: " + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
+    console.log ("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
+    console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
     if (global.m_serverconfig.m_configuration.ignoreLog!==false)
     {
         console.log ("logging is " + global.Colors.FgYellow + 'disabled' + global.Colors.Reset);
