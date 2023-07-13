@@ -753,7 +753,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 c_onb.m_actorType    =  c_loginRequest[c_CONSTANTS.CONST_ACTOR_TYPE.toString()];
                 c_onb.m_prm          =  c_loginRequest[c_CONSTANTS.CONST_PERMISSION2.toString()];
                 c_onb.m_creationDate = Date.now();
-                c_onb.m_ws = p_ws ;  // TODO: not used.. should be removed
+                c_onb.m_ws = p_ws ;  // It is used do not delete it... check for leak.
                 
 
                 Object.seal(c_onb);
@@ -776,7 +776,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 m_activeSenderIDsList[p_ws.m_loginRequest.m_requestID] = p_ws;
                 c_ChatAccountRooms.fn_del_member_fromAccountByName (p_ws.m_loginRequest,true);
                 c_ChatAccountRooms.fn_add_member_toGroup(p_ws.m_loginRequest); 
-                //fn_sendConnectionAccepted (p_ws);
+                
                 delete m_waitingAccounts [v_loginTempKey];
 
                 // 1- Send OK Message to Newly Connected Socket. 	
@@ -785,7 +785,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                     'mt': c_CONSTANTS.CONST_TYPE_AndruavSystem_ConnectedCommServer,
                     'ms': {s:'OK:connected:tcp:' + p_ws._socket.remoteAddress + ':' + p_ws._socket.remotePort}
                 }
-                //console.log (v_jmsg);
+                
                 p_ws.send(JSON.stringify(v_jmsg));
             }
             else
@@ -803,7 +803,7 @@ function fn_onConnect_Handler(p_ws,p_req)
     }
     else
     {
-        delete m_waitingAccounts [v_loginTempKey];
+        //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
         p_ws.close();
     }
 }
