@@ -10,6 +10,7 @@
  * 
  */
 
+"use strict";
 
 const c_commentStripper = require("./helpers/js_3rd_StripJsonComments.js");
 const c_dumpError 		= require ("./dumperror.js");
