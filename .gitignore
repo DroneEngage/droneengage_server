@@ -5,5 +5,5 @@ package-lock.json
 /server/ssl/*
 /log
 *.log
-
+*.heapsnapshot
 
