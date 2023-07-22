@@ -8,7 +8,7 @@
         {
             "type": "node",
             "request": "launch",
-            "runtimeExecutable": "/home/mhefny/.nvm/versions/node/v16.16.0/bin/node",
+            "runtimeExecutable": "/home/mhefny/.nvm/versions/node/v17.9.1/bin/node",
             "name": "Home Program",
             "stopOnEntry": true,
             "program": "${workspaceRoot}/server.js",
