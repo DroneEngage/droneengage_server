@@ -1,4 +1,5 @@
 "use strict";
+const heapdump = require('heapdump');
 
 /**
  * Routes communication between different parties.
@@ -10,19 +11,20 @@ const c_CONSTANTS = require ("../js_constants");
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
 const c_CommServerManagerClient = require("./js_comm_server_manager_client");
 const c_messages  = require("./js_andruavMessages.js");
+const udp = require ('./js_udp_proxy.js');
 
 const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
 const m_activeUdpProxy = {};
-const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 60000; //5000;
+const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
 
 var v_andruavTasks;
 
-
+var mem_counter = 0;
 
 function getHeaderParams(url)
 {
-	var regex = /[?&]([^=#]+)=([^&#]*)/g,
+	let regex = /[?&]([^=#]+)=([^&#]*)/g,
     params = {},
     match;
 
@@ -125,7 +127,7 @@ function fn_onConnect_Handler(p_ws,p_req)
 {
     const c_WS = p_ws;
     const c_params = getHeaderParams(p_req.url);
-    var v_loginTempKey;
+    let v_loginTempKey;
 
     if (global.m_logger) global.m_logger.Info('WS Created from Party','fn_onConnect_Handler',null,c_params);
 
@@ -196,40 +198,63 @@ function fn_onConnect_Handler(p_ws,p_req)
      */
     function fn_parseMessage (p_ws, p_message, p_isBinary)
     {
+        mem_counter++;
+        if (mem_counter%50==0)
+        {
+            const used = process.memoryUsage();
+            var readings = "";
+            for (let key in used) {
+                readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
+            
+            }
+            console.log(readings);
+        }
+        if (mem_counter%200==0)
+        {
+            //heapdump.writeSnapshot(`heapdump-${mem_counter}.heapsnapshot`);
+            
+        }
+        
+        
         var v_jmsg = null;
+        var p_message_w_permission = null;
         if (p_isBinary == true)
         {
-            
-            p_ws.m_status.m_BTX += p_message.length;
-            if (p_ws.m__group != null)
+            try
             {
-               p_ws.m__group.m_BTX += p_message.length;
-               p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
-            }
+                p_ws.m_status.m_BTX += p_message.length;
+                // do not log statistics for now.
+                // if (p_ws.m__group != null)
+                // {
+                //     p_ws.m__group.m_BTX += p_message.length;
+                //     p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
+                // }
+                // LEAK IS HERE
+                const nullIndex = p_message.indexOf(0);
+                if (nullIndex !== -1) {
+                    const c_buff = p_message.slice(0, nullIndex);
+                    const c_str = c_buff.toString('utf8');
+                    v_jmsg = JSON.parse(c_str);
+                }
 
-            const nullIndex = p_message.indexOf(0);
-            if (nullIndex !== -1) {
-                const c_buff = p_message.slice(0, nullIndex);
-                const c_str = c_buff.toString('utf8');
-                v_jmsg = JSON.parse(c_str);
-            }
-
-            if (v_jmsg == null)
-            {
-                // bug fix: sometimes text message is sent as binary althought it has no binary extension.
-                v_jmsg = JSON.parse(p_message);
+                if (v_jmsg == null)
+                {
+                    // bug fix: sometimes text message is sent as binary althought it has no binary extension.
+                    v_jmsg = JSON.parse(p_message);
+                }
                 
-            }
-            else
-            {
                 // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
                 // reconstruct the binary packet
                 v_jmsg.p = p_ws.m_loginRequest.m_prm;
                 const v_jmsg_str = JSON.stringify(v_jmsg);
                 const v_jmsgBuffer = Buffer.from(v_jmsg_str, 'utf8');
-                p_message = Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
+                p_message_w_permission = Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
+                
             }
-            
+            catch
+            {
+                return ;
+            }
         }
         else
         {
@@ -242,18 +267,19 @@ function fn_onConnect_Handler(p_ws,p_req)
             
             // This condition hides an error when ws is closed silently.
             // a new instance of ws is created with group = 0 and the  old ws is lost
-            if (p_ws.m__group != null)
-            {
-                p_ws.m__group.m_TTX += p_message.length;
-                p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
-            }
+            // do not log statistics for now.
+            // if (p_ws.m__group != null)
+            // {
+            //     p_ws.m__group.m_TTX += p_message.length;
+            //     p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
+            // }
             try
             {
                 v_jmsg = JSON.parse(p_message); 
                 
                 // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
                 v_jmsg.p = p_ws.m_loginRequest.m_prm;
-                p_message = JSON.stringify(v_jmsg);
+                p_message_w_permission = JSON.stringify(v_jmsg);
             }
             catch
             {
@@ -261,19 +287,19 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
         }
 
+        p_message = null;
         
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING])
         {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
-                //xconsole.log ('send to group');
                 // send to group
                 if (p_ws.m_loginRequest.m_actorType=='g') {
-                    send_message_toMyGroup(p_message, p_isBinary, p_ws);
+                    send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
                 }
                 else
                 {
                     //send_message_toMyGroup(p_message, p_isBinary, p_ws);
-                    send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                 }
 
             break;
@@ -296,19 +322,19 @@ function fn_onConnect_Handler(p_ws,p_req)
                     {
                         case "_GCS_":
                             // Target is GCS regardless who the sender is means [broadcast] to all GCS.
-                            send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                            send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                             break;
                         case "_GD_":
                             // Target is _GD_  means [broadcast] to all units including GCS & drones.
-                            send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                            send_message_toMyGroup (p_message_w_permission, p_isBinary, p_ws);
                             break;
                         case "_AGN_":
                             // Target is _AGN_  means [broadcast] to all drones.
-                            send_message_toMyGroup_Agent(p_message, p_isBinary, p_ws);
+                            send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
                             break;
                         default:
                             // ONE to ONE Message
-                            send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws);
+                            send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws);
                             break;        
                     }
                     break;
@@ -318,7 +344,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 if (p_ws.m_loginRequest.m_actorType === 'd')
                 {
                     // Default broadcast for agents is to GCS only
-                    send_message_toMyGroup_GCS(p_message, p_isBinary, p_ws);
+                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                     break;
                 }
                 else
@@ -326,7 +352,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 if (p_ws.m_loginRequest.m_actorType === 'g')
                 {
                     // Default broadcast for GCS is to all units.
-                    send_message_toMyGroup (p_message, p_isBinary, p_ws);
+                    send_message_toMyGroup (p_message_w_permission, p_isBinary, p_ws);
                     break;
                 }
             }
@@ -349,7 +375,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                                 // only vehicle can create udp proxy
                                 return ;
                             }
-                            let udp = require ('./js_udp_proxy.js');
+                            
                                 
                             if (v_jmsg.ms.en === true)
                             {
@@ -681,12 +707,13 @@ function fn_onConnect_Handler(p_ws,p_req)
     function fn_onWsMessage (p_msg)
     {
         //console.log ("debug ... fn_onWsMessage code: " + p_msg);
-        var v_isBinary = false;
+        let v_isBinary = false;
         if (typeof(p_msg) !== 'string')
         {
             v_isBinary = true;
         }
         fn_parseMessage(this, p_msg, v_isBinary);    
+        p_msg = null;
     }
 
 
@@ -719,12 +746,12 @@ function fn_onConnect_Handler(p_ws,p_req)
 
     function fn_onWsUpgrade (r)
     {
-        var a =0;
+        
     }
 
     function fn_onWsHeaders (r)
     {
-        var a =0;
+        
     }
 
 
@@ -753,7 +780,6 @@ function fn_onConnect_Handler(p_ws,p_req)
                 c_onb.m_actorType    =  c_loginRequest[c_CONSTANTS.CONST_ACTOR_TYPE.toString()];
                 c_onb.m_prm          =  c_loginRequest[c_CONSTANTS.CONST_PERMISSION2.toString()];
                 c_onb.m_creationDate = Date.now();
-                c_onb.m_ws = p_ws ;  // It is used do not delete it... check for leak.
                 
 
                 Object.seal(c_onb);
@@ -775,7 +801,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 
                 m_activeSenderIDsList[p_ws.m_loginRequest.m_requestID] = p_ws;
                 c_ChatAccountRooms.fn_del_member_fromAccountByName (p_ws.m_loginRequest,true);
-                c_ChatAccountRooms.fn_add_member_toGroup(p_ws.m_loginRequest); 
+                c_ChatAccountRooms.fn_add_member_toGroup(p_ws); 
                 
                 delete m_waitingAccounts [v_loginTempKey];
 
@@ -790,6 +816,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
             else
             {
+                p_ws.m_loginRequest = null;
                 p_ws.close();
             }
             c_CommServerManagerClient.fn_onMessageOpened();
@@ -804,6 +831,7 @@ function fn_onConnect_Handler(p_ws,p_req)
     else
     {
         //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
+        p_ws.m_loginRequest = null;
         p_ws.close();
     }
 }
