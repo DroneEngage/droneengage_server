@@ -37,10 +37,11 @@ function fn_getUnitCount()
 };
 
 
-function fn_add_member_toGroup (p_loginRequest) 
+function fn_add_member_toGroup (p_ws) 
 {
-    const v_id  = p_loginRequest.m_accountID;
-    var v_acc; 
+    const c_loginRequest = p_ws.m_loginRequest;
+    const v_id  = c_loginRequest.m_accountID;
+    let v_acc; 
 
     if (c_accounts.hasOwnProperty(v_id))
     {
@@ -52,11 +53,11 @@ function fn_add_member_toGroup (p_loginRequest)
     {
         // account does not exist
          console.log ("account " + v_id + " created")
-         v_acc = new Account (p_loginRequest.m_accountID);
+         v_acc = new Account (v_id);
          c_accounts[v_id] = v_acc; 
     }
 
-    return v_acc.fn_add_member_toGroup (p_loginRequest.m_senderID ,p_loginRequest.m_groupID, p_loginRequest.m_ws);
+    return v_acc.fn_add_member_toGroup (c_loginRequest.m_senderID ,c_loginRequest.m_groupID, p_ws);
 }
 
 
@@ -87,33 +88,30 @@ function fn_del_member_fromGroup (p_websocket)
 function fn_del_member_fromAccountByName (p_loginRequest, terminateSocket)
 {
    
-  var acc = c_accounts[p_loginRequest.m_accountID];
+    let acc = c_accounts[p_loginRequest.m_accountID];
 
-  if (acc == null)
-  {
-      console.log ("info: no account associated with socket .... This could be a brand new socket.");
-      
-      
-      return ;
-  }
+    if (acc == null)
+    {
+        console.log ("info: no account associated with socket .... This could be a brand new socket.");
+        
+        return ;
+    }
 
-  acc.fn_del_member_fromAccountByName (p_loginRequest.m_senderID,terminateSocket);
+    acc.fn_del_member_fromAccountByName (p_loginRequest.m_senderID,terminateSocket);
 
 }
 
 
 
-function fn_forEach (callback)
+function fn_forEach(callback)
 {
-    var keys = Object.keys(c_accounts) ; 
-    var len = keys.length;
-    //console.log ("AccountsMaster.forEach Keys:" + keys);
-     for (var i=0; i < len; ++i)
-     {
-        callback (c_accounts[keys[i]]);
-     }
+    const keys = Object.keys(c_accounts);
+    let len = keys.length;
+    for (let i = 0; i < len; i++) {
+      const account = c_accounts[keys[i]];
+      callback(account);
+    }
 }
-
 
 
 
@@ -137,7 +135,7 @@ function Account (p_accountID)
  ***/
 Account.prototype.fn_add_member_toGroup = function (p_unitname, p_groupname, p_ws)
 {
-    var gr;
+    let gr;
     
     if (this.m_groups.hasOwnProperty(p_groupname))
     {
@@ -171,10 +169,10 @@ Account.prototype.fn_del_member_fromAccountByName = function (p_unitname, termin
 
 Account.prototype.forEach = function (callback)
 {
-    var keys = Object.keys(this.m_groups) ; 
-    var len = keys.length;
+    let keys = Object.keys(this.m_groups) ; 
+    let len = keys.length;
     //console.log ("Account.forEach Keys:" + keys);
-    for (var i=0; i < len; ++i)
+    for (let i=0; i < len; ++i)
     {
         callback (this.m_groups[keys[i]]);
     }
@@ -287,11 +285,11 @@ Group.prototype.fn_deleteMemberByName = function (p_unitname,terminateSocket)
 
 Group.prototype.forEach = function (callback)
 {
-    var keys = Object.keys(this.m_units) ; 
-    var len = keys.length;
+    let keys = Object.keys(this.m_units) ; 
+    let len = keys.length;
    // console.log ("Group.forEach Keys:" + keys);
    
-   for (var i=0; i < len; ++i)
+   for (let i=0; i < len; ++i)
    {
         callback (this.m_units[keys[i]]);
    }
@@ -304,11 +302,9 @@ Group.prototype.fn_sendToIndividual = function(message, isbinary, target)
     {
             
         //xconsoleLog ('func: send sendToIndividual %s' ,target);
-        var socket = this.m_units[target];
+        let socket = this.m_units[target];
         if (socket != null)
         {
-            //xconsoleLog ('func: send message to %s' ,socket.Name);
-
             socket.send(message,
             {
                 binary: isbinary
@@ -320,8 +316,7 @@ Group.prototype.fn_sendToIndividual = function(message, isbinary, target)
     {
             console.log('broadcast :ws:' + socket.Name + ' Orphan socket Error:' + e);
             _dumpError.fn_dumperror(e);
-           // if (e.message == "not opened")
-           // {
+        
                console.log('========================================');
                if (socket != null)
                     { // Most propably this is the same socket disconnected silently.
@@ -344,37 +339,35 @@ Group.prototype.fn_sendToIndividual = function(message, isbinary, target)
                             _dumpError.fn_dumperror(e);
                         }
                     }
-            //}
         }
 
 }
 
-Group.prototype.fn_broadcastToGCS = function(message, isbinary, c_ws)
-{
-    var keys = Object.keys(this.m_units) ; 
-    var len = keys.length;
-    // console.log ("Group.forEach Keys:" + keys);
-   
-    const sender_id = c_ws.m_loginRequest.m_senderID;
-    
-    for (var i=0; i < len; ++i)
-    {
-         try
-        {
-            var socket = this.m_units[keys[i]];
-            if ((socket.m_loginRequest.m_actorType === 'g')
-                && (socket.m_loginRequest.m_senderID != sender_id))
-            {
-                //xconsoleLog ('func: send message to %s' ,value.Name);
 
-                socket.send(message,
-                {
-                    binary: isbinary
-                });
-            }
+Group.prototype.fn_broadcastToGCS = function(p_message, isbinary, c_ws) {
+    const sender_id = c_ws.m_loginRequest.m_senderID;
+  
+    for (const [_, socket] of Object.entries(this.m_units)) {
+      try {
+        if (
+          socket.m_loginRequest.m_actorType === 'g' &&
+          socket.m_loginRequest.m_senderID !== sender_id
+        ) {
+          socket.send(p_message, { binary: isbinary },() => {
+            p_message = null;
+          });
         }
-        catch (e)
-        {
+      } catch (e) {
+        console.log(`broadcast error for socket ${socket.Name}: ${e}`);
+        _dumpError.fn_dumperror(e);
+  
+        if (socket != null) {
+          try {
+            socket.m__group.fn_deleteMemberByName(socket.name);
+            console.log(`unit ${socket.Name} found dead`);
+            delete socket.name;
+            socket.terminate();
+          } catch (e) {
             console.log('broadcast :ws:' + socket.Name + ' Orphan socket Error:' + e);
             _dumpError.fn_dumperror(e);
             console.log('========================================');
@@ -398,24 +391,20 @@ Group.prototype.fn_broadcastToGCS = function(message, isbinary, c_ws)
                     _dumpError.fn_dumperror(e);
                 }
             }
-        
+          }
         }
+      }
     }
-}
-
+  };
 
 Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
 {
-    const keys = Object.keys(this.m_units) ; 
-    const len = keys.length;
     const sender_id = c_ws.m_loginRequest.m_senderID;
 
-    for (var i=0; i < len; ++i)
+    for (const [_, socket] of Object.entries(this.m_units)) 
     {
          try
         {
-            var socket = this.m_units[keys[i]];
-            
             // do not send back to yourself or non drones.
             if ((socket.m_loginRequest.m_actorType === 'd')
             && (socket.m_loginRequest.m_senderID != sender_id)) 
@@ -423,7 +412,9 @@ Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
                 socket.send(p_message,
                 {
                     binary: p_isbinary
-                });
+                },() => {
+                    p_message = null;
+                  });
             }
         }
         catch (e)
@@ -458,16 +449,12 @@ Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
 
 Group.prototype.broadcast = function(p_message, p_isbinary, c_ws)
 {
-    const keys = Object.keys(this.m_units) ; 
-    const len = keys.length;
     const sender_id = c_ws.m_loginRequest.m_senderID;
 
-    for (var i=0; i < len; ++i)
+    for (const [_, socket] of Object.entries(this.m_units)) 
     {
          try
         {
-            var socket = this.m_units[keys[i]];
-
             // do not send back to yourself.
             if ((socket.m_loginRequest.m_senderID != sender_id)) 
             {
@@ -476,7 +463,9 @@ Group.prototype.broadcast = function(p_message, p_isbinary, c_ws)
                 socket.send(p_message,
                 {
                     binary: p_isbinary
-                });
+                },() => {
+                    p_message = null;
+                  });
             }
         }
         catch (e)
