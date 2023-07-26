@@ -208,12 +208,21 @@ function fn_onConnect_Handler(p_ws,p_req)
             
             }
             console.log(readings);
+
+            if (global.m_serverconfig.m_configuration.memory_max !=null)
+            {
+                var mem = Math.round(used.rss / 1024 / 1024 * 100) / 100 
+                if (global.m_serverconfig.m_configuration.memory_max < mem){
+                console.log ("Memory is " + global.Colors.FgYellow  + mem + global.Colors.Error  + ' RESTART' + global.Colors.Reset);
+                process.exit(1);
+                }
+            }
         }
-        if (mem_counter%200==0)
-        {
-            //heapdump.writeSnapshot(`heapdump-${mem_counter}.heapsnapshot`);
+        // if (mem_counter%200==0)
+        // {
+        //     //heapdump.writeSnapshot(`heapdump-${mem_counter}.heapsnapshot`);
             
-        }
+        // }
         
         
         var v_jmsg = null;
