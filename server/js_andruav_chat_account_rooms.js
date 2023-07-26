@@ -353,9 +353,7 @@ Group.prototype.fn_broadcastToGCS = function(p_message, isbinary, c_ws) {
           socket.m_loginRequest.m_actorType === 'g' &&
           socket.m_loginRequest.m_senderID !== sender_id
         ) {
-          socket.send(p_message, { binary: isbinary },() => {
-            p_message = null;
-          });
+          socket.send(p_message, { binary: isbinary });
         }
       } catch (e) {
         console.log(`broadcast error for socket ${socket.Name}: ${e}`);
@@ -412,9 +410,7 @@ Group.prototype.fn_broadcastToDrone = function(p_message, p_isbinary, c_ws)
                 socket.send(p_message,
                 {
                     binary: p_isbinary
-                },() => {
-                    p_message = null;
-                  });
+                });
             }
         }
         catch (e)
@@ -463,9 +459,7 @@ Group.prototype.broadcast = function(p_message, p_isbinary, c_ws)
                 socket.send(p_message,
                 {
                     binary: p_isbinary
-                },() => {
-                    p_message = null;
-                  });
+                });
             }
         }
         catch (e)
