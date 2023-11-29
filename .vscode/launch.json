@@ -3,30 +3,31 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [
-
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Home Program",
-            "program": "${workspaceRoot}/server.js",
-            "args": ["--config=server.home.config"]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Home Vodafone",
-            "program": "${workspaceRoot}/server.js",
-            "args": ["--config=server.home.vodafone.config"]
-            
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Production Program",
-            "program": "${workspaceRoot}/server.js",
-            "args": ["--config=server.config"]
-            
-        }
-    ]
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Home Program",
+      "stopOnEntry": true,
+      "program": "${workspaceRoot}/server.js",
+      "args": ["--config=server.home.config"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Home Vodafone",
+      "program": "${workspaceRoot}/server.js",
+      "args": ["--config=server.home.vodafone.config"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Production Program",
+      "program": "${workspaceRoot}/server.js",
+      "args": ["--config=server.config"]
+    }
+  ]
 }
