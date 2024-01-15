@@ -276,6 +276,7 @@
                 closeUDPSocket (name, function ()
                 {
                     getUDPSocket (name, socket1, socket2, callback); // recursive to create a new one after deleting the current.
+                    delete m_activeUdpProxy[name];
                 });
             }
         }
