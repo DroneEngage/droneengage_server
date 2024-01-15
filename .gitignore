@@ -3,7 +3,14 @@ node_modules/
 package-lock.json
 server.home.config
 /server/ssl/*
-/log
+log/
 *.log
-
+*.heapsnapshot
+logs/
+terrain/
+*.log
+*.tlog
+*.bin
+*.parm
+*.raw
 
