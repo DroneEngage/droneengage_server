@@ -717,7 +717,7 @@ function fn_onConnect_Handler(p_ws,p_req)
     {
         //console.log ("debug ... fn_onWsMessage code: " + p_msg);
         let v_isBinary = false;
-        if (typeof(p_msg) !== 'string')
+        if (p_msg[p_msg.length-1] !== 125)
         {
             v_isBinary = true;
         }
