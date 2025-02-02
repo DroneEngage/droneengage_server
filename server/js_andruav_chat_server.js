@@ -224,22 +224,20 @@ function fn_onConnect_Handler(p_ws,p_req)
     function fn_parseMessage (p_ws, p_message, p_isBinary)
     {
         mem_counter++;
-        if (mem_counter%50==0)
-        {
+        if (mem_counter % 50 === 0) {
             const used = process.memoryUsage();
-            var readings = "";
+            let readings = "";
             for (let key in used) {
                 readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
-            
             }
             console.log(readings);
-
-            if (global.m_serverconfig.m_configuration.memory_max !=null)
-            {
-                var mem = Math.round(used.rss / 1024 / 1024 * 100) / 100 
-                if (global.m_serverconfig.m_configuration.memory_max < mem){
-                console.log ("Memory is " + global.Colors.FgYellow  + mem + global.Colors.Error  + ' RESTART' + global.Colors.Reset);
-                process.exit(1);
+    
+            // Check memory limit
+            if (global.m_serverconfig.m_configuration.memory_max != null) {
+                const mem = Math.round(used.rss / 1024 / 1024 * 100) / 100;
+                if (global.m_serverconfig.m_configuration.memory_max < mem) {
+                    console.log("Memory is " + global.Colors.FgYellow + mem + global.Colors.Error + ' RESTART' + global.Colors.Reset);
+                    process.exit(1);
                 }
             }
         }
@@ -255,8 +253,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 
                 if (nullIndex !== -1) {
                     const c_buff = p_message.slice(0, nullIndex);
-                    const c_str = c_buff.toString('utf8');
-                    v_jmsg = JSON.parse(c_str);
+                    v_jmsg = JSON.parse(c_buff.toString('utf8'));
                 }
 
                 if (v_jmsg == null)
@@ -325,7 +322,6 @@ function fn_onConnect_Handler(p_ws,p_req)
                 }
                 else
                 {
-                    //send_message_toMyGroup(p_message, p_isBinary, p_ws);
                     send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                 }
 
@@ -385,6 +381,7 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
             catch (e)
             {
+                p_message_w_permission = Buffer.alloc(0);
                 c_dumpError.fn_dumperror(e);
                 if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL','fn_parseMessage',null,e);
             }
