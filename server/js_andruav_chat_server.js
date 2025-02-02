@@ -71,8 +71,6 @@ function getHeaderParams(url)
 
 function send_message_toMyGroup(message,isbinary,ws)
 {
-    //xconsole.log ('func: send_message_toMyGroup');
-
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
@@ -93,8 +91,6 @@ function send_message_toMyGroup(message,isbinary,ws)
 
 function send_message_toMyGroup_Agent(message,isbinary,ws)
 {
-    //xconsole.log ('func: send_message_toMyGroup');
-
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
@@ -115,8 +111,6 @@ function send_message_toMyGroup_Agent(message,isbinary,ws)
 
 function send_message_toMyGroup_GCS(message,isbinary,ws)
 {
-    //xconsole.log ('func: send_message_toMyGroup');
-
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
@@ -136,7 +130,6 @@ function send_message_toMyGroup_GCS(message,isbinary,ws)
 
 function send_message_toTarget(message, isbinary, target, ws)
 {
-	//xconsole.log ('func: send_message_toTarget');
 	try
 	{	
 		ws.m__group.fn_sendToIndividual (message,isbinary,target);
@@ -259,13 +252,6 @@ function fn_onConnect_Handler(p_ws,p_req)
             try
             {
                 p_ws.m_status.m_BTX += p_message.length;
-                // do not log statistics for now.
-                // if (p_ws.m__group != null)
-                // {
-                //     p_ws.m__group.m_BTX += p_message.length;
-                //     p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
-                // }
-                // LEAK IS HERE
                 
                 if (nullIndex !== -1) {
                     const c_buff = p_message.slice(0, nullIndex);
@@ -304,11 +290,6 @@ function fn_onConnect_Handler(p_ws,p_req)
             // This condition hides an error when ws is closed silently.
             // a new instance of ws is created with group = 0 and the  old ws is lost
             // do not log statistics for now.
-            // if (p_ws.m__group != null)
-            // {
-            //     p_ws.m__group.m_TTX += p_message.length;
-            //     p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
-            // }
             try
             {
                 v_jmsg = JSON.parse(p_message); 
