@@ -218,13 +218,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 }
             }
         }
-        // if (mem_counter%200==0)
-        // {
-        //     //heapdump.writeSnapshot(`heapdump-${mem_counter}.heapsnapshot`);
-            
-        // }
-        
-        
+         
         var v_jmsg = null;
         var p_message_w_permission = null;
         if (p_isBinary == true)
