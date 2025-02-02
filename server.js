@@ -11,8 +11,6 @@ var v_configFileName = global.m_serverconfig.getFileName();
 
 
 
-//let andruavServer = require ('./server/andruavServer.js')
-
 let m_andruav_comm_server = require ('./server/js_andruav_comm_server.js')
 
 
