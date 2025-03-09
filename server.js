@@ -1,7 +1,6 @@
 "use strict";
 
 const v_pjson           = require('./package.json');
-const hlp_string        = require('./helpers/hlp_strings.js');
 global.Colors           = require ("./helpers/js_colors.js").Colors;
 global.m_serverconfig   = require ('./js_serverConfig.js'); 
 

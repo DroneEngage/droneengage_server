@@ -142,20 +142,18 @@ function Group(account, id) {
 Group.prototype.fn_addMember = function (p_unitname, p_websocket) {
 
     if (this._units.hasOwnProperty(p_unitname)) {
-        // this should never happen.
-        consoleLog("fn_addMember [" + p_unitname + "] already EXISTS Dont Override")
-
-
-        return false;
+        // If a client reconnects with the same p_unitname (e.g., due to network issues), the old "zombie" socket would block the new one from being added. This leaves:
+        // A stale socket in the group that might no longer be connected.
+        // The new/valid socket unable to register itself.
+        // Previous implementation was to prevent other users to kick-out a running drone but this should be handled
+        // by proper authentication and authorization mechanisms.
+        consoleLog(`fn_addMember [${p_unitname}] already exists. Replacing.`);
+        this.fn_deleteMemberByName(p_unitname, true);
     }
-    else {
-        consoleLog("fn_addMember [" + p_unitname + "] Added")
-
-        this._units[p_unitname] = p_websocket;
-        p_websocket.name = p_unitname;
-        p_websocket.group = this;
-    }
-
+    consoleLog(`fn_addMember [${p_unitname}] Added`);
+    this._units[p_unitname] = p_websocket;
+    p_websocket.name = p_unitname;
+    p_websocket.group = this;
     return true;
 }
 
@@ -221,46 +219,19 @@ Group.prototype.fn_sendToIndividual = function (message, v_isBinary, target) {
 Group.prototype.fn_broadcast = function (message, v_isBinary, ws) {
     const keys = Object.keys(this._units);
     const len = keys.length;
-    // consoleLog ("Group.forEach Keys:" + keys);
-
-    for (var i = 0; i < len; ++i) {
+    for (let i = 0; i < len; ++i) {
+        const socket = this._units[keys[i]];
         try {
-            var socket = this._units[keys[i]];
-            if (socket.m_andruavParams.uid != ws.m_andruavParams.uid) {
-                //xconsoleLog ('func: send message to %s' ,value.Name);
-
-                socket.send(message,
-                    {
-                        binary: v_isBinary
-                    });
+            if (socket.m_andruavParams.uid !== ws.m_andruavParams.uid) {
+                socket.send(message, { binary: v_isBinary });
             }
-        }
-        catch (e) {
-            consoleLog('fn_broadcast :ws:' + socket.Name + ' Orphan socket Error:' + e);
+        } catch (e) {
+            consoleLog(`fn_broadcast: Error sending to ${socket.name}: ${e}`);
             c_dumpError.fn_dumperror(e);
-            consoleLog('========================================');
-            if (socket != null) { // Most propably this is the same socket disconnected silently.
-
-                try {
-                    socket.group.fn_deleteMemberByName(socket.name);
-
-                    consoleLog('unit' + socket.Name + ' found dead');
-                    /////////fn_register_db(oldSocket);
-                    //oldSocket.Name = null; // to prevent onClose ->unregister->del_member_fromGroup so deletes the new record.
-                    socket.fn_register_db();
-                    delete socket.name;
-                    socket.terminate();
-
-                }
-                catch (e) {
-                    c_dumpError.fn_dumperror(e);
-                }
-            }
-
+            this.fn_deleteMemberByName(socket.name, true);
         }
     }
-
-}
+};
 
 
 exports.m_andruavSocket = function m_andruavSocket() {

@@ -118,7 +118,7 @@ function fn_AuthServerMessagesHandler(p_msg) {
 function fn_updateServerWatchdog() {
     try {
         // prepare my Info Card
-        var v_obj = {
+        let v_obj = {
             'isOnline': true,
             'version': v_version,
             'serverId': global.m_serverconfig.m_configuration.server_id,
@@ -161,20 +161,6 @@ function fn_startServer() {
         process.env["NODE_EXTRA_CA_CERTS"] = global.m_serverconfig.m_configuration.ca_cert_path;
     }
 
-
-
-    // if (global.m_serverconfig.m_configuration.dynamicKEY)
-    // {
-    //     // initialize key once
-    //     fn_refreshDynamicKeys(); 
-
-    //     // start a timer
-    //     setInterval(function()
-    //     {
-    //         fn_refreshDynamicKeys()
-    //     }, global.m_serverconfig.m_configuration.dynamicKEYInterval); // Time in milliseconds;
-
-    // }
 
     m_commServerManagerClient.fn_onMessageReceived = fn_AuthServerMessagesHandler;
     m_commServerManagerClient.fn_onMessageOpened = fn_AuthServerConnectionHandler;
