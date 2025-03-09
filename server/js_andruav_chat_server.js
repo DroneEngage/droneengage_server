@@ -8,11 +8,11 @@ const path = require('path');
  */
 const c_dumpError = require("../dumperror.js");
 
-const c_CONSTANTS = require ("../js_constants");
+const c_CONSTANTS = require("../js_constants");
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
 const c_CommServerManagerClient = require("./js_comm_server_manager_client");
-const c_messages  = require("./js_andruavMessages.js");
-const udp = require ('./js_udp_proxy.js');
+const c_messages = require("./js_andruavMessages.js");
+const udp = require('./js_udp_proxy.js');
 
 const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
@@ -25,7 +25,7 @@ let c_commandProcessors = []; // Array to store loaded plugins
 if (global.m_serverconfig.m_configuration?.command_plugin) {
     global.m_serverconfig.m_configuration.command_plugin.forEach((pluginPath) => {
         try {
-            
+
             // Step 1: Navigate up one level from __dirname to reach the andruav_server folder
             const baseDir = path.join(__dirname, '..'); // Goes up to andruav_server
 
@@ -48,96 +48,80 @@ if (global.m_serverconfig.m_configuration?.command_plugin) {
 }
 
 
- 
+
 
 var v_andruavTasks;
 
 var mem_counter = 0;
 
-function getHeaderParams(url)
-{
-	let regex = /[?&]([^=#]+)=([^&#]*)/g,
-    params = {},
-    match;
+function getHeaderParams(url) {
+    let regex = /[?&]([^=#]+)=([^&#]*)/g,
+        params = {},
+        match;
 
 
-	while(match = regex.exec(url)) {
-		params[match[1]] = match[2]; 
-	}
-	
-	return params;
+    while (match = regex.exec(url)) {
+        params[match[1]] = match[2];
+    }
+
+    return params;
 }
 
 
-function send_message_toMyGroup(message,isbinary,ws)
-{
+function send_message_toMyGroup(message, isbinary, ws) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
-    try
-    {
-        if (ws.m__group != null)
-        {
+    try {
+        if (ws.m__group != null) {
             ws.m__group.broadcast(message, isbinary, ws);
         }
     }
-    catch (e)
-    {
+    catch (e) {
         console.log('send_message_toMyGroup :ws:' + ws.name + 'Error:' + e);
         c_dumpError.fn_dumperror(e);
     }
 }
 
 
-function send_message_toMyGroup_Agent(message,isbinary,ws)
-{
+function send_message_toMyGroup_Agent(message, isbinary, ws) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
-    try
-    {
-        if (ws.m__group != null)
-        {
+    try {
+        if (ws.m__group != null) {
             ws.m__group.fn_broadcastToDrone(message, isbinary, ws);
         }
     }
-    catch (e)
-    {
+    catch (e) {
         console.log('send_message_toMyGroup :ws:' + ws.name + 'Error:' + e);
         c_dumpError.fn_dumperror(e);
     }
 }
 
 
-function send_message_toMyGroup_GCS(message,isbinary,ws)
-{
+function send_message_toMyGroup_GCS(message, isbinary, ws) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
-    try
-    {
-        if (ws.m__group != null)
-        {
+    try {
+        if (ws.m__group != null) {
             ws.m__group.fn_broadcastToGCS(message, isbinary, ws);
         }
     }
-    catch (e)
-    {
+    catch (e) {
         console.log('send_message_toMyGroup :ws:' + ws.name + 'Error:' + e);
         c_dumpError.fn_dumperror(e);
     }
 }
 
-function send_message_toTarget(message, isbinary, target, ws)
-{
-	try
-	{	
-		ws.m__group.fn_sendToIndividual (message,isbinary,target);
-	}
-	catch (err)
-	{
-		c_dumpError.fn_dumperror(err);
-	}
+function send_message_toTarget(message, isbinary, target, ws) {
+    try {
+        ws.m__group.fn_sendToIndividual(message, isbinary, target);
+    }
+    catch (err) {
+        c_dumpError.fn_dumperror(err);
+    }
 }
 
 
@@ -148,13 +132,12 @@ function send_message_toTarget(message, isbinary, target, ws)
  * @param {Socket for Each Connection} p_ws 
  * @param {request parameters} p_req 
  */
-function fn_onConnect_Handler(p_ws,p_req)
-{
+function fn_onConnect_Handler(p_ws, p_req) {
     const c_WS = p_ws;
     const c_params = getHeaderParams(p_req.url);
     let v_loginTempKey;
 
-    if (global.m_logger) global.m_logger.Info('WS Created from Party','fn_onConnect_Handler',null,c_params);
+    if (global.m_logger) global.m_logger.Info('WS Created from Party', 'fn_onConnect_Handler', null, c_params);
 
     /**
      * key is valid. mainly used so that onClose event can tell the reason of closing.
@@ -168,50 +151,45 @@ function fn_onConnect_Handler(p_ws,p_req)
      * Make sure that connection has a key and in valid format and in the waiting list "m_waitingAccounts".
      * @param {*} p_params 
      */
-    function fn_validateKey (p_params){
-        
+    function fn_validateKey(p_params) {
+
         const c_PARAM_LENGTH = 200;
-        if (p_params == null )
-        {
-            if (global.m_logger) global.m_logger.Warn('Party tried to login using no credentials','fn_validateKey',null,p_params);
+        if (p_params == null) {
+            if (global.m_logger) global.m_logger.Warn('Party tried to login using no credentials', 'fn_validateKey', null, p_params);
             return false;
         }
-        
-        if (c_params.hasOwnProperty(c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString())===true)
-        {
+
+        if (c_params.hasOwnProperty(c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()) === true) {
             /*
              * Agent is connecting using  CONST_CS_LOGIN_TEMP_KEY that is originally generated by AndruavServer
              * and sent back to AndruavAuth.
              */
             v_loginTempKey = p_params[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()].toString();
-            if ((v_loginTempKey.fn_isAlphanumeric() !== true) || (v_loginTempKey.length > c_PARAM_LENGTH))
-            {
+            if ((v_loginTempKey.fn_isAlphanumeric() !== true) || (v_loginTempKey.length > c_PARAM_LENGTH)) {
                 c_WS.close();
-                if (global.m_logger) global.m_logger.Warn('Party tried to login using bad credentials','fn_validateKey',null,p_params);
+                if (global.m_logger) global.m_logger.Warn('Party tried to login using bad credentials', 'fn_validateKey', null, p_params);
                 return false;
             }
         }
 
 
-        if (!m_waitingAccounts.hasOwnProperty (v_loginTempKey))
-        {
+        if (!m_waitingAccounts.hasOwnProperty(v_loginTempKey)) {
             // UNAUTHERIZED LOGIN or REPATED Login with same Key .. close the connection.
-            console.log ("debug INVALID v_loginTempKey .." + v_loginTempKey )
+            console.log("debug INVALID v_loginTempKey .." + v_loginTempKey)
 
             c_WS.close();
-            if (global.m_logger) global.m_logger.Warn('Party failed to login','fn_validateKey',null,p_params);
+            if (global.m_logger) global.m_logger.Warn('Party failed to login', 'fn_validateKey', null, p_params);
             return false;
         }
-        else
-        {
-            
-            console.log ("debug valid v_loginTempKey .." + v_loginTempKey )
+        else {
+
+            console.log("debug valid v_loginTempKey .." + v_loginTempKey)
             v_validKey = true;
-            if (global.m_logger) global.m_logger.Info('Party successfully login','fn_validateKey',null,p_params);
+            if (global.m_logger) global.m_logger.Info('Party successfully login', 'fn_validateKey', null, p_params);
 
             return true;
         }
-        
+
 
     }
 
@@ -221,8 +199,7 @@ function fn_onConnect_Handler(p_ws,p_req)
      * @param {*} p_message 
      * @param {*} p_isBinary 
      */
-    function fn_parseMessage (p_ws, p_message, p_isBinary)
-    {
+    function fn_parseMessage(p_ws, p_message, p_isBinary) {
         mem_counter++;
         if (mem_counter % 50 === 0) {
             const used = process.memoryUsage();
@@ -231,7 +208,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
             }
             console.log(readings);
-    
+
             // Check memory limit
             if (global.m_serverconfig.m_configuration.memory_max != null) {
                 const mem = Math.round(used.rss / 1024 / 1024 * 100) / 100;
@@ -241,520 +218,461 @@ function fn_onConnect_Handler(p_ws,p_req)
                 }
             }
         }
-         
+
         let v_jmsg = null;
         let p_message_w_permission = null;
         const nullIndex = p_message.indexOf(0);
-        if (p_isBinary == true)
-        {
-            try
-            {
+        if (p_isBinary == true) {
+            try {
                 p_ws.m_status.m_BTX += p_message.length;
-                
+
                 if (nullIndex !== -1) {
                     const c_buff = p_message.slice(0, nullIndex);
                     v_jmsg = JSON.parse(c_buff.toString('utf8'));
                 }
 
-                if (v_jmsg == null)
-                {
+                if (v_jmsg == null) {
                     // bug fix: sometimes text message is sent as binary althought it has no binary extension.
                     v_jmsg = JSON.parse(p_message);
                 }
-                
+
                 // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
                 // reconstruct the binary packet
                 v_jmsg.p = p_ws.m_loginRequest.m_prm;
                 const v_jmsg_str = JSON.stringify(v_jmsg);
                 const v_jmsgBuffer = Buffer.from(v_jmsg_str, 'utf8');
                 p_message_w_permission = Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
-                
+
             }
-            catch
-            {
-                return ;
+            catch {
+                return;
             }
         }
-        else
-        {
-            if (p_ws.m_status == null) 
-            {
+        else {
+            if (p_ws.m_status == null) {
                 // unauthorized login.
-                return ;
+                return;
             }
             p_ws.m_status.m_TTX += p_message.length;
-            
+
             // This condition hides an error when ws is closed silently.
             // a new instance of ws is created with group = 0 and the  old ws is lost
             // do not log statistics for now.
-            try
-            {
-                v_jmsg = JSON.parse(p_message); 
-                
+            try {
+                v_jmsg = JSON.parse(p_message);
+
                 // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
                 v_jmsg.p = p_ws.m_loginRequest.m_prm;
                 p_message_w_permission = JSON.stringify(v_jmsg);
             }
-            catch
-            {
-                return ;
+            catch {
+                return;
             }
         }
 
         // Call Plugins if Available
         c_commandProcessors.forEach(element => {
-                element.fn_processCommand(p_ws, p_message, v_jmsg, nullIndex,
-                    function (p_param1, p_param2)
-                    {
-    
-                        return ;
-                    });
-            });
-        
+            element.fn_processCommand(p_ws, p_message, v_jmsg, nullIndex,
+                function (p_param1, p_param2) {
+
+                    return;
+                });
+        });
+
         p_message = null;
-        
-        switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING])
-        {
+
+        switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING]) {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
                 // send to group
-                if (p_ws.m_loginRequest.m_actorType=='g') {
+                if (p_ws.m_loginRequest.m_actorType == 'g') {
                     send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
                 }
-                else
-                {
+                else {
                     send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                 }
 
-            break;
-            
-            case c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL: // individual
-            try
-            {
-                // ROUTING LOGIC:
-                // 1- Sender is Agent:
-                //  a. Sender is an agent with null target means [broadcast] cannot broadcast to another agent.
-                //  b. Sender is an agent with _GD_ target means [broadcast] to all including other drones.
-                // 2- GCS Logic:
-                //   a. GCS has no target then send to ALL AGENTS & GCS.
-                //   b. GCS specifies AGENTS as target.
-                // 3- one-to-one message as target not a reserved word.
+                break;
 
-                if ((v_jmsg.hasOwnProperty('tg')===true) && (v_jmsg['tg'].length>0))
-                {
-                    switch (v_jmsg['tg'])
-                    {
-                        case "_GCS_":
-                            // Target is GCS regardless who the sender is means [broadcast] to all GCS.
+            case c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL: // individual
+                try {
+                    // ROUTING LOGIC:
+                    // 1- Sender is Agent:
+                    //  a. Sender is an agent with null target means [broadcast] cannot broadcast to another agent.
+                    //  b. Sender is an agent with _GD_ target means [broadcast] to all including other drones.
+                    // 2- GCS Logic:
+                    //   a. GCS has no target then send to ALL AGENTS & GCS.
+                    //   b. GCS specifies AGENTS as target.
+                    // 3- one-to-one message as target not a reserved word.
+
+                    if ((v_jmsg.hasOwnProperty('tg') === true) && (v_jmsg['tg'].length > 0)) {
+                        switch (v_jmsg['tg']) {
+                            case "_GCS_":
+                                // Target is GCS regardless who the sender is means [broadcast] to all GCS.
+                                send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                                break;
+                            case "_GD_":
+                                // Target is _GD_  means [broadcast] to all units including GCS & drones.
+                                send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                                break;
+                            case "_AGN_":
+                                // Target is _AGN_  means [broadcast] to all drones.
+                                send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
+                                break;
+                            default:
+                                // ONE to ONE Message
+                                send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws);
+                                break;
+                        }
+                        break;
+                    }
+                    else
+                        // 2- Agent  & (v_jmsg['tg'] == null)
+                        if (p_ws.m_loginRequest.m_actorType === 'd') {
+                            // Default broadcast for agents is to GCS only
                             send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
                             break;
-                        case "_GD_":
-                            // Target is _GD_  means [broadcast] to all units including GCS & drones.
-                            send_message_toMyGroup (p_message_w_permission, p_isBinary, p_ws);
-                            break;
-                        case "_AGN_":
-                            // Target is _AGN_  means [broadcast] to all drones.
-                            send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
-                            break;
-                        default:
-                            // ONE to ONE Message
-                            send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws);
-                            break;        
-                    }
-                    break;
+                        }
+                        else
+                            // 3- GCS Logic  & (v_jmsg['tg'] == null)
+                            if (p_ws.m_loginRequest.m_actorType === 'g') {
+                                // Default broadcast for GCS is to all units.
+                                send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                                break;
+                            }
                 }
-                else
-                // 2- Agent  & (v_jmsg['tg'] == null)
-                if (p_ws.m_loginRequest.m_actorType === 'd')
-                {
-                    // Default broadcast for agents is to GCS only
-                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
-                    break;
+                catch (e) {
+                    p_message_w_permission = Buffer.alloc(0);
+                    c_dumpError.fn_dumperror(e);
+                    if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL', 'fn_parseMessage', null, e);
                 }
-                else
-                // 3- GCS Logic  & (v_jmsg['tg'] == null)
-                if (p_ws.m_loginRequest.m_actorType === 'g')
-                {
-                    // Default broadcast for GCS is to all units.
-                    send_message_toMyGroup (p_message_w_permission, p_isBinary, p_ws);
-                    break;
-                }
-            }
-            catch (e)
-            {
-                p_message_w_permission = Buffer.alloc(0);
-                c_dumpError.fn_dumperror(e);
-                if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL','fn_parseMessage',null,e);
-            }
-            break;
+                break;
 
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM:
-            {
-                try
                 {
-                    switch (v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID])
-                    {
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy:
-                            if (c_WS.m_loginRequest.m_actorType!=='d') 
-                            {
-                                // only vehicle can create udp proxy
-                                return ;
-                            }
-                            
-                                
-                            if (v_jmsg.ms.en === true)
-                            {
-                                if (global.m_serverconfig.m_configuration.allow_udpproxy_fixed_port !== true)
-                                {   // unit cannot determine port numbers if allow_udpproxy_fixed_port != true.
-                                    v_jmsg.ms.socket1.port = 0;
-                                    v_jmsg.ms.socket2.port = 0;
+                    try {
+                        switch (v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID]) {
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy:
+                                if (c_WS.m_loginRequest.m_actorType !== 'd') {
+                                    // only vehicle can create udp proxy
+                                    return;
                                 }
 
-                                udp.getUDPSocket(p_ws.name,v_jmsg.ms.socket1,v_jmsg.ms.socket2, function (ms)
-                                {
-                                    if (ms.en === false)    
-                                    {
+
+                                if (v_jmsg.ms.en === true) {
+                                    if (global.m_serverconfig.m_configuration.allow_udpproxy_fixed_port !== true) {   // unit cannot determine port numbers if allow_udpproxy_fixed_port != true.
                                         v_jmsg.ms.socket1.port = 0;
                                         v_jmsg.ms.socket2.port = 0;
+                                    }
 
-                                        udp.closeUDPSocket(p_ws.name, function (ms)
-                                        {
+                                    udp.getUDPSocket(p_ws.name, v_jmsg.ms.socket1, v_jmsg.ms.socket2, function (ms) {
+                                        if (ms.en === false) {
+                                            v_jmsg.ms.socket1.port = 0;
+                                            v_jmsg.ms.socket2.port = 0;
+
+                                            udp.closeUDPSocket(p_ws.name, function (ms) {
+                                                v_jmsg.ms = ms;
+                                                v_jmsg.ty = 'i'; // individual p_message
+                                                v_jmsg.tg = p_ws.name; // sender = target
+                                                v_jmsg.sd = '_SYS_';
+                                                c_WS.send(JSON.stringify(v_jmsg));
+                                            });
+
+
+                                        } else {
+                                            v_jmsg.ms = ms;
+                                            v_jmsg.ty = 'i'; // individual p_message
+                                            v_jmsg.tg = p_ws.name; // sender = target
+                                            v_jmsg.sd = '_SYS_';
+                                            c_WS.send(JSON.stringify(v_jmsg));
+                                        }
+                                    });
+                                } else
+                                    if (v_jmsg.ms.en === false) {
+                                        udp.closeUDPSocket(p_ws.name, function (ms) {
                                             v_jmsg.ms = ms;
                                             v_jmsg.ty = 'i'; // individual p_message
                                             v_jmsg.tg = p_ws.name; // sender = target
                                             v_jmsg.sd = '_SYS_';
                                             c_WS.send(JSON.stringify(v_jmsg));
                                         });
-                                        
-
-                                    }else
-                                    {
-                                        v_jmsg.ms = ms;
-                                        v_jmsg.ty = 'i'; // individual p_message
-                                        v_jmsg.tg = p_ws.name; // sender = target
-                                        v_jmsg.sd = '_SYS_';
-                                        c_WS.send(JSON.stringify(v_jmsg));
                                     }
-                                });
-                            } else 
-                            if (v_jmsg.ms.en === false)
-                            {
-                                udp.closeUDPSocket(p_ws.name, function (ms)
+                                break;
+
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_Ping:
+                                v_jmsg.ms.s = 'OK:pong';
+                                c_WS.send(JSON.stringify(v_jmsg));
+                                break;
+
+                            case 'ver':
+                                v_jmsg.ms = 'ver:' + version;
+                                c_WS.send(JSON.stringify(v_jmsg));
+                                c_dumpError.fn_dumpdebug('ver cmd:' + version);
+                                break;
+
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_LogoutCommServer:
+                                c_ChatAccountRooms.fn_del_member_fromGroup(p_ws);
+                                v_jmsg.ms = { s: 'OK:dell' };
+                                c_WS.send(JSON.stringify(v_jmsg));
+                                break;
+
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks:
                                 {
-                                    v_jmsg.ms = ms;
-                                    v_jmsg.ty = 'i'; // individual p_message
-                                    v_jmsg.tg = p_ws.name; // sender = target
-                                    v_jmsg.sd = '_SYS_';
-                                    c_WS.send(JSON.stringify(v_jmsg));
-                                });
-                            }
-                            break;
+                                    if (v_andruavTasks == null) break;
+                                    c_dumpError.fn_dumpdebug("load tasks command");
+                                    var v_params = {
+                                        resultfunc: function (res) {
+                                            if (res.length == 0) {
+                                                // no data
+                                                c_dumpError.fn_dumpdebug("Data Found:" + res.length);
 
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_Ping:
-                            v_jmsg.ms.s = 'OK:pong';
-                            c_WS.send(JSON.stringify(v_jmsg));
-                            break;
+                                            }
+                                            else {
+                                                // data found
+                                                c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
+                                                v_jmsg.ty = 'i'; // individual p_message
+                                                v_jmsg.tg = p_ws.name; // sender = target
+                                                v_jmsg.sd = '_SYS_';
+                                                //c_dumpError.fn_dumpdebug (JSON.stringify(res[0].task));
+                                                //c_dumpError.fn_dumpdebug (JSON.stringify(res[1].task));
+                                                for (var i = 0; i < res.length; i++) {
+                                                    v_jmsg.sid = res[i].SID; // add SID to p_message to point to a task.
+                                                    v_jmsg.ms = res[i].task;
+                                                    //c_dumpError.fn_dumpdebug (JSON.stringify(v_jmsg));
+                                                    v_jmsg.mt = res[i].messageType; // rechange command to the saved command.
+                                                    //c_dumpError.fn_dumpdebug('MESSAGE:'+JSON.stringify(v_jmsg));
+                                                    c_WS.send(JSON.stringify(v_jmsg));
+                                                }
+                                            }
 
-                        case 'ver':
-                            v_jmsg.ms = 'ver:' + version;
-                            c_WS.send(JSON.stringify(v_jmsg));
-                            c_dumpError.fn_dumpdebug('ver cmd:' + version);
-                            break;
-                        
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_LogoutCommServer:
-                            c_ChatAccountRooms.fn_del_member_fromGroup(p_ws);
-                            v_jmsg.ms = {s:'OK:dell'};
-                            c_WS.send(JSON.stringify(v_jmsg));
-                            break;
+                                        },
+                                        errfunc: function (err) {
+                                            c_dumpError.fn_dumperror(err);
+                                        }
+                                    };
+                                    var mms = v_jmsg.ms;
+                                    if (typeof mms === 'string' || mms instanceof String) {
+                                        // backword compatible
+                                        mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
+                                    }
 
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks:
-                            {
-                                if (v_andruavTasks == null) break ;
-                                c_dumpError.fn_dumpdebug("load tasks command");
-                                var v_params = {
-                                  resultfunc: function(res)
-                                  {
-                                      if (res.length == 0)
-                                      {
-                                          // no data
-                                          c_dumpError.fn_dumpdebug("Data Found:" + res.length);
+                                    if ((mms.ai == null) || (mms.ai.length == 0)) {
+                                        return; // error List all crosee accounts tasks ... ERROR
+                                    }
+                                    c_dumpError.fn_dumpdebug(mms);
+                                    c_dumpError.fn_dumpdebug(mms.messageType);
+                                    //{resultfunc,errfunc,largerThan_SID, party_sid,sender,receiver,messageType,task,isPermanent}
+                                    if (mms.hasOwnProperty("lts")) v_params.largerThan_SID = mms.lts;
+                                    if (mms.hasOwnProperty("ps")) v_params.party_sid = mms.ps;
+                                    if (mms.hasOwnProperty("ac")) v_params.accessCode = mms.ac;
+                                    if (mms.hasOwnProperty("ai")) v_params.accountID = mms.ai;
+                                    if (mms.hasOwnProperty("gn")) v_params.groupName = mms.gn;
+                                    if (mms.hasOwnProperty("s")) v_params.sender = mms.s;
+                                    if (mms.hasOwnProperty("r")) v_params.receiver = mms.r;
+                                    if (mms.hasOwnProperty("mt")) v_params.messageType = mms.mt;
+                                    if (mms.hasOwnProperty("ip")) v_params.isPermanent = mms.ip;
+                                    c_dumpError.fn_dumpdebug(v_params);
+                                    v_andruavTasks.fn_get_tasks(v_params);
+                                }
+                                break;
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks:
+                                {
+                                    if (v_andruavTasks == null) break;
+                                    c_dumpError.fn_dumpdebug("save tasks command");
+                                    var v_params = {
+                                        resultfunc: function (res) {
+                                            if (res.length == 0) {
+                                                // no data
+                                                c_dumpError.fn_dumpdebug("Data Found:" + res.length);
 
-                                      }
-                                      else
-                                      {
-                                          // data found
-                                          c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
-                                          v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = p_ws.name; // sender = target
-                                          v_jmsg.sd = '_SYS_';
-                                          //c_dumpError.fn_dumpdebug (JSON.stringify(res[0].task));
-                                          //c_dumpError.fn_dumpdebug (JSON.stringify(res[1].task));
-                                          for (var i = 0; i < res.length; i++)
-                                          {
-                                              v_jmsg.sid = res[i].SID; // add SID to p_message to point to a task.
-                                              v_jmsg.ms  = res[i].task;
-                                              //c_dumpError.fn_dumpdebug (JSON.stringify(v_jmsg));
-                                              v_jmsg.mt = res[i].messageType; // rechange command to the saved command.
-                                              //c_dumpError.fn_dumpdebug('MESSAGE:'+JSON.stringify(v_jmsg));
-                                              c_WS.send(JSON.stringify(v_jmsg));
-                                          }
-                                      }
+                                            }
+                                            else {
+                                                // data found
+                                                c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
+                                                v_jmsg.ty = 'i'; // individual p_message
+                                                v_jmsg.tg = p_ws.name; // sender = target
+                                                v_jmsg.sd = '_SYS_';
+                                                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
+                                                v_jmsg.ms = "Done";
+                                                c_WS.send(JSON.stringify(v_jmsg));
+                                                //console.log (JSON.stringify(res[0].task));
+                                                //console.log (JSON.stringify(res[1].task));
 
-                                  },
-                                  errfunc: function(err)
-                                  {
-                                      c_dumpError.fn_dumperror(err);
-                                  }
-                              };
-                              var mms = v_jmsg.ms;
-                              if (typeof mms === 'string' || mms instanceof String)
-                              {
-                                  // backword compatible
-                                  mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
-                              }
-                              
-                              if ((mms.ai == null) || (mms.ai.length ==0))
-                              {
-                                  return ; // error List all crosee accounts tasks ... ERROR
-                              }
-                              c_dumpError.fn_dumpdebug(mms);
-                              c_dumpError.fn_dumpdebug(mms.messageType);
-                              //{resultfunc,errfunc,largerThan_SID, party_sid,sender,receiver,messageType,task,isPermanent}
-                              if (mms.hasOwnProperty("lts")) v_params.largerThan_SID = mms.lts;
-                              if (mms.hasOwnProperty("ps")) v_params.party_sid = mms.ps;
-                              if (mms.hasOwnProperty("ac")) v_params.accessCode = mms.ac;
-                              if (mms.hasOwnProperty("ai")) v_params.accountID = mms.ai;
-                              if (mms.hasOwnProperty("gn")) v_params.groupName = mms.gn;
-                              if (mms.hasOwnProperty("s")) v_params.sender = mms.s;
-                              if (mms.hasOwnProperty("r")) v_params.receiver = mms.r;
-                              if (mms.hasOwnProperty("mt")) v_params.messageType = mms.mt;
-                              if (mms.hasOwnProperty("ip")) v_params.isPermanent = mms.ip;
-                              c_dumpError.fn_dumpdebug(v_params);
-                              v_andruavTasks.fn_get_tasks(v_params);
-                          }
-                          break;
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks:
-                            {
-                                if (v_andruavTasks == null) break ;
-                                c_dumpError.fn_dumpdebug("save tasks command");
-                                var v_params = {
-                                  resultfunc: function(res)
-                                  {
-                                      if (res.length == 0)
-                                      {
-                                          // no data
-                                          c_dumpError.fn_dumpdebug("Data Found:" + res.length);
+                                            }
 
-                                      }
-                                      else
-                                      {
-                                          // data found
-                                          c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
-                                          v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = p_ws.name; // sender = target
-                                          v_jmsg.sd = '_SYS_';
-                                          v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
-                                          v_jmsg.ms = "Done";
-                                          c_WS.send(JSON.stringify(v_jmsg));
-                                           //console.log (JSON.stringify(res[0].task));
-                                          //console.log (JSON.stringify(res[1].task));
-                                         
-                                      }
+                                        },
+                                        errfunc: function (err) {
+                                            c_dumpError.fn_dumperror(err);
+                                        }
+                                    };
+                                    var mms = v_jmsg.ms;
+                                    if (typeof mms === 'string' || mms instanceof String) {
+                                        // backword compatible
+                                        mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
+                                    }
+                                    c_dumpError.fn_dumpdebug(mms);
+                                    if ((mms.ai == null) || (mms.ai.length == 0)) {
+                                        return; // error List all crosee accounts tasks ... ERROR
+                                    }
+                                    // c_dumpError.fn_dumpdebug(mms.messageType);
 
-                                  },
-                                  errfunc: function(err)
-                                  {
-                                      c_dumpError.fn_dumperror(err);
-                                  }
-                              };
-                              var mms = v_jmsg.ms;
-                              if (typeof mms === 'string' || mms instanceof String)
-                              {
-                                  // backword compatible
-                                  mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
-                              }
-                              c_dumpError.fn_dumpdebug(mms);
-                              if ((mms.ai == null) || (mms.ai.length ==0))
-                              {
-                                  return ; // error List all crosee accounts tasks ... ERROR
-                              }
-                              // c_dumpError.fn_dumpdebug(mms.messageType);
-                               
-                              if (mms.hasOwnProperty("ac")) 	v_params.accessCode     = mms.ac;
-                              if (mms.hasOwnProperty("ai")) 	v_params.accountID      = mms.ai;
-                              if (mms.hasOwnProperty("ps")) 	v_params.party_sid      = mms.ps;
-                              if (mms.hasOwnProperty("gn")) 	v_params.groupName      = mms.gn;
-                              if (mms.hasOwnProperty("s")) 	    v_params.sender         = mms.s;
-                              if (mms.hasOwnProperty("r")) 	    v_params.receiver       = mms.r;
-                              if (mms.hasOwnProperty("mt")) 	v_params.messageType    = mms.mt;
-                              if (mms.hasOwnProperty("ip")) 	v_params.isPermanent    = mms.ip;
-                              if (mms.hasOwnProperty("t")) 	    v_params.task	        = JSON.stringify(mms.t);
-                              
-                              c_dumpError.fn_dumpdebug(v_params);
-                              v_andruavTasks.fn_add_task(v_params);
-                          }
-                          break;
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks:
-                            {
-                                if (v_andruavTasks == null) break ;
-                                c_dumpError.fn_dumpdebug("delete tasks command");
-                                var v_params = {
-                                  resultfunc: function(res)
-                                  {
-                                      if (res.length == 0)
-                                      {
-                                          // no data
-                                          c_dumpError.fn_dumpdebug("Data Found:" + res.length);
+                                    if (mms.hasOwnProperty("ac")) v_params.accessCode = mms.ac;
+                                    if (mms.hasOwnProperty("ai")) v_params.accountID = mms.ai;
+                                    if (mms.hasOwnProperty("ps")) v_params.party_sid = mms.ps;
+                                    if (mms.hasOwnProperty("gn")) v_params.groupName = mms.gn;
+                                    if (mms.hasOwnProperty("s")) v_params.sender = mms.s;
+                                    if (mms.hasOwnProperty("r")) v_params.receiver = mms.r;
+                                    if (mms.hasOwnProperty("mt")) v_params.messageType = mms.mt;
+                                    if (mms.hasOwnProperty("ip")) v_params.isPermanent = mms.ip;
+                                    if (mms.hasOwnProperty("t")) v_params.task = JSON.stringify(mms.t);
 
-                                      }
-                                      else
-                                      {
-                                          // data found
-                                          c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
-                                          v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = p_ws.name; // sender = target
-                                          v_jmsg.sd = '_SYS_';
-                                          v_jmsg.mt = '9003';
-                                          v_jmsg.ms = "Done";
-                                          c_WS.send(JSON.stringify(v_jmsg));
-                                           
-                                      }
+                                    c_dumpError.fn_dumpdebug(v_params);
+                                    v_andruavTasks.fn_add_task(v_params);
+                                }
+                                break;
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks:
+                                {
+                                    if (v_andruavTasks == null) break;
+                                    c_dumpError.fn_dumpdebug("delete tasks command");
+                                    var v_params = {
+                                        resultfunc: function (res) {
+                                            if (res.length == 0) {
+                                                // no data
+                                                c_dumpError.fn_dumpdebug("Data Found:" + res.length);
 
-                                  },
-                                  errfunc: function(err)
-                                  {
-                                      c_dumpError.fn_dumperror(err);
-                                  }
-                              };
+                                            }
+                                            else {
+                                                // data found
+                                                c_dumpError.fn_dumpdebug("Rows Length:" + res.length);
+                                                v_jmsg.ty = 'i'; // individual p_message
+                                                v_jmsg.tg = p_ws.name; // sender = target
+                                                v_jmsg.sd = '_SYS_';
+                                                v_jmsg.mt = '9003';
+                                                v_jmsg.ms = "Done";
+                                                c_WS.send(JSON.stringify(v_jmsg));
 
-                              var mms = v_jmsg.ms;
-                              if (typeof mms === 'string' || mms instanceof String)
-                              {
-                                  // backword compatible
-                                  mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
-                              }
-                              c_dumpError.fn_dumpdebug(mms);
-                              // c_dumpError.fn_dumpdebug(mms.messageType);
-                              if ((mms.ai == null) || (mms.ai.length ==0))
-                              {
-                                  return ; // error List all crosee accounts tasks ... ERROR
-                              }
-                              
-                              
-                              if (mms.hasOwnProperty("ac")) 	v_params.accessCode = mms.ac;
-                              if (mms.hasOwnProperty("ai")) 	v_params.accountID = mms.ai;
-                              if (mms.hasOwnProperty("ps")) 	v_params.party_sid = mms.ps;
-                              if (mms.hasOwnProperty("gn")) 	v_params.groupName = mms.gn;
-                              if (mms.hasOwnProperty("s")) 	v_params.sender = mms.s;
-                              if (mms.hasOwnProperty("r")) 	v_params.receiver = mms.r;
-                              if (mms.hasOwnProperty("mt")) 	v_params.messageType = mms.mt;
-                              if (mms.hasOwnProperty("ip")) 	v_params.isPermanent = mms.ip;
-                              if (mms.hasOwnProperty("t")) 	v_params.task	 = JSON.stringify(mms.t);
-                        
-                        
-                              c_dumpError.fn_dumpdebug(v_params);
-                              //v_andruavTasks.delete_tasks(v_params);
-                          }
-                          break;
-                        case c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks:
-                            {
-                                c_dumpError.fn_dumpdebug("disable tasks command");
-                                var v_params = {
-                                  resultfunc: function(res)
-                                  {
-                                      if (res.affectedRows == 0)
-                                      {
-                                          // no data
-                                          c_dumpError.fn_dumpdebug("Data Found:" + res.affectedRows);
+                                            }
 
-                                      }
-                                      else
-                                      {
-                                          // data found
-                                          c_dumpError.fn_dumpdebug("Rows Length:" + res.affectedRows);
-                                          v_jmsg.ty = 'i'; // individual p_message
-                                          v_jmsg.tg = p_ws.name; // sender = target
-                                          v_jmsg.sd = '_SYS_';
-                                          v_jmsg.mt = '9003';
-                                          v_jmsg.ms = "Done";
-                                          c_WS.send(JSON.stringify(v_jmsg));
-                                           
-                                      }
+                                        },
+                                        errfunc: function (err) {
+                                            c_dumpError.fn_dumperror(err);
+                                        }
+                                    };
 
-                                  },
-                                  errfunc: function(err)
-                                  {
-                                      c_dumpError.fn_dumperror(err);
-                                  }
-                              };
+                                    var mms = v_jmsg.ms;
+                                    if (typeof mms === 'string' || mms instanceof String) {
+                                        // backword compatible
+                                        mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
+                                    }
+                                    c_dumpError.fn_dumpdebug(mms);
+                                    // c_dumpError.fn_dumpdebug(mms.messageType);
+                                    if ((mms.ai == null) || (mms.ai.length == 0)) {
+                                        return; // error List all crosee accounts tasks ... ERROR
+                                    }
 
-                              var mms = v_jmsg.ms;
-                              if (typeof mms === 'string' || mms instanceof String)
-                              {
-                                  // backword compatible
-                                  mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
-                              }                                    
-                              if ((mms.ai == null) || (mms.ai.length ==0))
-                              {
-                                  return ; // No Global wide operation is allowed
-                              }
-                              
-                              c_dumpError.fn_dumpdebug(mms);
-                                 
-                              if (mms.hasOwnProperty("ac")) 	v_params.accessCode = mms.ac;
-                              if (mms.hasOwnProperty("ai")) 	v_params.accountID = mms.ai;
-                              if (mms.hasOwnProperty("ps")) 	v_params.party_sid = mms.ps;
-                              if (mms.hasOwnProperty("gn")) 	v_params.groupName = mms.gn;
-                              if (mms.hasOwnProperty("s")) 	v_params.sender = mms.s;
-                              if (mms.hasOwnProperty("r")) 	v_params.receiver = mms.r;
-                              if (mms.hasOwnProperty("mt")) 	v_params.messageType = mms.mt;
-                              if (mms.hasOwnProperty("ip")) 	v_params.isPermanent = mms.ip;
-                              if (mms.hasOwnProperty("t")) 	v_params.task	 = JSON.stringify(mms.t);
-                        
-                              c_dumpError.fn_dumpdebug(v_params);
-                              v_andruavTasks.fn_disable_tasks(v_params);
-                          }
-                          break;
-                                                    
+
+                                    if (mms.hasOwnProperty("ac")) v_params.accessCode = mms.ac;
+                                    if (mms.hasOwnProperty("ai")) v_params.accountID = mms.ai;
+                                    if (mms.hasOwnProperty("ps")) v_params.party_sid = mms.ps;
+                                    if (mms.hasOwnProperty("gn")) v_params.groupName = mms.gn;
+                                    if (mms.hasOwnProperty("s")) v_params.sender = mms.s;
+                                    if (mms.hasOwnProperty("r")) v_params.receiver = mms.r;
+                                    if (mms.hasOwnProperty("mt")) v_params.messageType = mms.mt;
+                                    if (mms.hasOwnProperty("ip")) v_params.isPermanent = mms.ip;
+                                    if (mms.hasOwnProperty("t")) v_params.task = JSON.stringify(mms.t);
+
+
+                                    c_dumpError.fn_dumpdebug(v_params);
+                                    //v_andruavTasks.delete_tasks(v_params);
+                                }
+                                break;
+                            case c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks:
+                                {
+                                    c_dumpError.fn_dumpdebug("disable tasks command");
+                                    var v_params = {
+                                        resultfunc: function (res) {
+                                            if (res.affectedRows == 0) {
+                                                // no data
+                                                c_dumpError.fn_dumpdebug("Data Found:" + res.affectedRows);
+
+                                            }
+                                            else {
+                                                // data found
+                                                c_dumpError.fn_dumpdebug("Rows Length:" + res.affectedRows);
+                                                v_jmsg.ty = 'i'; // individual p_message
+                                                v_jmsg.tg = p_ws.name; // sender = target
+                                                v_jmsg.sd = '_SYS_';
+                                                v_jmsg.mt = '9003';
+                                                v_jmsg.ms = "Done";
+                                                c_WS.send(JSON.stringify(v_jmsg));
+
+                                            }
+
+                                        },
+                                        errfunc: function (err) {
+                                            c_dumpError.fn_dumperror(err);
+                                        }
+                                    };
+
+                                    var mms = v_jmsg.ms;
+                                    if (typeof mms === 'string' || mms instanceof String) {
+                                        // backword compatible
+                                        mms = JSON.parse(v_jmsg.ms); //Internal p_message JSON
+                                    }
+                                    if ((mms.ai == null) || (mms.ai.length == 0)) {
+                                        return; // No Global wide operation is allowed
+                                    }
+
+                                    c_dumpError.fn_dumpdebug(mms);
+
+                                    if (mms.hasOwnProperty("ac")) v_params.accessCode = mms.ac;
+                                    if (mms.hasOwnProperty("ai")) v_params.accountID = mms.ai;
+                                    if (mms.hasOwnProperty("ps")) v_params.party_sid = mms.ps;
+                                    if (mms.hasOwnProperty("gn")) v_params.groupName = mms.gn;
+                                    if (mms.hasOwnProperty("s")) v_params.sender = mms.s;
+                                    if (mms.hasOwnProperty("r")) v_params.receiver = mms.r;
+                                    if (mms.hasOwnProperty("mt")) v_params.messageType = mms.mt;
+                                    if (mms.hasOwnProperty("ip")) v_params.isPermanent = mms.ip;
+                                    if (mms.hasOwnProperty("t")) v_params.task = JSON.stringify(mms.t);
+
+                                    c_dumpError.fn_dumpdebug(v_params);
+                                    v_andruavTasks.fn_disable_tasks(v_params);
+                                }
+                                break;
+
+                        }
+                    }
+                    catch (e) {
+                        c_dumpError.fn_dumperror(e);
+                        if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_SYSTEM', 'fn_parseMessage', null, e);
                     }
                 }
-                catch (e)
-                {
-                    c_dumpError.fn_dumperror(e);
-                    if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_SYSTEM','fn_parseMessage',null,e);
-                }
-            }
-            break;
-            
+                break;
+
         }
     }
 
-    function fn_onWsMessage (p_msg)
-    {
+    function fn_onWsMessage(p_msg) {
         //console.log ("debug ... fn_onWsMessage code: " + p_msg);
         let v_isBinary = false;
-        if (typeof(p_msg) !== 'string')
-        {
+        if (typeof (p_msg) !== 'string') {
             v_isBinary = true;
         }
-        fn_parseMessage(this, p_msg, v_isBinary);    
+        fn_parseMessage(this, p_msg, v_isBinary);
         p_msg = null;
     }
 
 
-    function fn_onWsClose (p_code)
-    {
+    function fn_onWsClose(p_code) {
         // this function can be called during key validation.
         // also this function is called when terminated a socket when a senderID kicks out an older unit with same senderID.
         // in this case m__terminated = true other wise the new senderID will also kick itself.
         //console.log ("debug ... fn_onWsClose code: " + p_code + " of key " + v_loginTempKey);
-        if (this.hasOwnProperty('m__terminated' == false) || (this.m__terminated == false))
-        {
-            c_ChatAccountRooms.fn_del_member_fromAccountByName (this.m_loginRequest,true);
+        if (this.hasOwnProperty('m__terminated' == false) || (this.m__terminated == false)) {
+            c_ChatAccountRooms.fn_del_member_fromAccountByName(this.m_loginRequest, true);
         }
-        
+
         // remove from active senderIDs list.
-        if (p_ws.m_loginRequest != null)
-        {
+        if (p_ws.m_loginRequest != null) {
             delete m_activeSenderIDsList[p_ws.m_loginRequest.m_senderID];
             c_CommServerManagerClient.fn_onMessageOpened();
             // I do not clear m_activeUdpProxy here to reduce chance of changing port because of temp disconnection.
@@ -762,98 +680,89 @@ function fn_onConnect_Handler(p_ws,p_req)
     }
 
 
-    function fn_onWsError (p_err)
-    {
-        console.log ("debug ... fn_onWsError err: " + p_err);
-        if (global.m_logger) global.m_logger.Error('Party WS Error','fn_onWsError',null,p_err);
+    function fn_onWsError(p_err) {
+        console.log("debug ... fn_onWsError err: " + p_err);
+        if (global.m_logger) global.m_logger.Error('Party WS Error', 'fn_onWsError', null, p_err);
     }
 
-    function fn_onWsUpgrade (r)
-    {
-        
+    function fn_onWsUpgrade(r) {
+
     }
 
-    function fn_onWsHeaders (r)
-    {
-        
+    function fn_onWsHeaders(r) {
+
     }
 
 
     p_ws.on('message', fn_onWsMessage);
     p_ws.on('close', fn_onWsClose);
     p_ws.on('error', fn_onWsError);
-    p_ws.on('upgrade',fn_onWsUpgrade);
-    p_ws.on('headers',fn_onWsHeaders);
+    p_ws.on('upgrade', fn_onWsUpgrade);
+    p_ws.on('headers', fn_onWsHeaders);
 
-    fn_validateKey (c_params);
-    
-    if (v_loginTempKey != null)
-    {
+    fn_validateKey(c_params);
+
+    if (v_loginTempKey != null) {
         // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
 
-        try
-        {
-            const c_loginRequest = m_waitingAccounts [v_loginTempKey];
-            if (c_loginRequest != null)
-            {
+        try {
+            const c_loginRequest = m_waitingAccounts[v_loginTempKey];
+            if (c_loginRequest != null) {
                 const c_onb = {};
-                c_onb.m_senderID     =  c_params['s']; // !THIS IS WRONG. SenderID should be as a SYS message to allow encryption
-                c_onb.m_accountID    =  c_loginRequest[c_CONSTANTS.CONST_CS_ACCOUNT_ID.toString()];
-                c_onb.m_groupID      =  c_loginRequest[c_CONSTANTS.CONST_CS_GROUP_ID.toString()];
-                c_onb.m_requestID    =  c_loginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
-                c_onb.m_actorType    =  c_loginRequest[c_CONSTANTS.CONST_ACTOR_TYPE.toString()];
-                c_onb.m_prm          =  c_loginRequest[c_CONSTANTS.CONST_PERMISSION2.toString()];
+                c_onb.m_senderID = c_params['s']; // !THIS IS WRONG. SenderID should be as a SYS message to allow encryption
+                c_onb.m_accountID = c_loginRequest[c_CONSTANTS.CONST_CS_ACCOUNT_ID.toString()];
+                c_onb.m_groupID = c_loginRequest[c_CONSTANTS.CONST_CS_GROUP_ID.toString()];
+                c_onb.m_requestID = c_loginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
+                c_onb.m_actorType = c_loginRequest[c_CONSTANTS.CONST_ACTOR_TYPE.toString()];
+                c_onb.m_prm = c_loginRequest[c_CONSTANTS.CONST_PERMISSION2.toString()];
                 c_onb.m_creationDate = Date.now();
-                
+
 
                 Object.seal(c_onb);
 
                 const c_status = {};
-                c_status.m_useFCB   =  false;
-                c_status.m_TTX      = 0;
-                c_status.m_BTX      = 0;
-                c_status.m_lng      = 0;
-                c_status.m_lat      = 0;
-                c_status.m_speed    = 0;
-                c_status.m_alt      = 0;
-               
+                c_status.m_useFCB = false;
+                c_status.m_TTX = 0;
+                c_status.m_BTX = 0;
+                c_status.m_lng = 0;
+                c_status.m_lat = 0;
+                c_status.m_speed = 0;
+                c_status.m_alt = 0;
 
-                
+
+
                 p_ws.m_loginRequest = c_onb;
-                p_ws.m_status       = c_status;
+                p_ws.m_status = c_status;
 
-                
+
                 m_activeSenderIDsList[p_ws.m_loginRequest.m_requestID] = p_ws;
-                c_ChatAccountRooms.fn_del_member_fromAccountByName (p_ws.m_loginRequest,true);
-                c_ChatAccountRooms.fn_add_member_toGroup(p_ws); 
-                
-                delete m_waitingAccounts [v_loginTempKey];
+                c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
+                c_ChatAccountRooms.fn_add_member_toGroup(p_ws);
+
+                delete m_waitingAccounts[v_loginTempKey];
 
                 // 1- Send OK Message to Newly Connected Socket. 	
                 var v_jmsg = {
                     'ty': 's',
                     'mt': c_CONSTANTS.CONST_TYPE_AndruavSystem_ConnectedCommServer,
-                    'ms': {s:'OK:connected:tcp:' + p_ws._socket.remoteAddress + ':' + p_ws._socket.remotePort}
+                    'ms': { s: 'OK:connected:tcp:' + p_ws._socket.remoteAddress + ':' + p_ws._socket.remotePort }
                 }
-                
+
                 p_ws.send(JSON.stringify(v_jmsg));
             }
-            else
-            {
+            else {
                 p_ws.m_loginRequest = null;
                 p_ws.close();
             }
             c_CommServerManagerClient.fn_onMessageOpened();
         }
-        catch (ex)
-        {
+        catch (ex) {
             // exception handling to be removed.
-            console.log ("TEMP DEBUG EXCEPTION ... Ex:" + JSON.stringify(ex));
-            if (global.m_logger) global.m_logger.Error('Party WS Error','fn_onConnect_Handler',null,ex);
+            console.log("TEMP DEBUG EXCEPTION ... Ex:" + JSON.stringify(ex));
+            if (global.m_logger) global.m_logger.Error('Party WS Error', 'fn_onConnect_Handler', null, ex);
         }
     }
-    else
-    {
+    else {
         //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
         p_ws.m_loginRequest = null;
         p_ws.close();
@@ -861,46 +770,42 @@ function fn_onConnect_Handler(p_ws,p_req)
 }
 
 
-function fn_startChatServer ()
-{
-    const v_express           = require('express');
-    const v_fs                = require('fs');
-    const v_path              = require('path');
-    const v_WebSocketServer   = require('ws').Server;
+function fn_startChatServer() {
+    const v_express = require('express');
+    const v_fs = require('fs');
+    const v_path = require('path');
+    const v_WebSocketServer = require('ws').Server;
     const c_https = require('https');
 
-    
+
     const options = {
-        key:  v_fs.readFileSync(v_path.join(__dirname, "./" + global.m_serverconfig.m_configuration.ssl_key_file.toString())),
+        key: v_fs.readFileSync(v_path.join(__dirname, "./" + global.m_serverconfig.m_configuration.ssl_key_file.toString())),
         cert: v_fs.readFileSync(v_path.join(__dirname, "./" + global.m_serverconfig.m_configuration.ssl_cert_file.toString()))
-		};
+    };
 
 
-    
+
     const wserver = c_https.createServer(options, new v_express());
     wserver.listen(global.m_serverconfig.m_configuration.server_port, global.m_serverconfig.m_configuration.server_ip); // start websocket server [secure]	
 
     const v_wss = new v_WebSocketServer(
-    {
-        server: wserver
-    }); 
+        {
+            server: wserver
+        });
 
     v_wss.on('connection', fn_onConnect_Handler);
 }
 
-function fn_initTasks ()
-{
-    if (global.m_serverconfig.m_configuration.ignoreLoadingTasks === false)
-	{
-		v_andruavTasks = require ("./js_andruavTasks_v2.js");
+function fn_initTasks() {
+    if (global.m_serverconfig.m_configuration.ignoreLoadingTasks === false) {
+        v_andruavTasks = require("./js_andruavTasks_v2.js");
         v_andruavTasks.fn_initTasks();
-	}
+    }
 }
 
 
-function fn_startServer ()
-{
-    console.log (global.Colors.Success + "[OK] Comm Server Manager Started at port " + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
+function fn_startServer() {
+    console.log(global.Colors.Success + "[OK] Comm Server Manager Started at port " + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
     fn_initTasks();
     fn_startChatServer();
 }
@@ -913,46 +818,38 @@ function fn_startServer ()
  *  r: requestID GUID, 
  *  f: login_temp_key (same as p_tempLoginKey)}
  */
-function fn_addWaitingAccount (p_tempLoginKey,p_LoginRequest)
-{
+function fn_addWaitingAccount(p_tempLoginKey, p_LoginRequest) {
     m_waitingAccounts[p_tempLoginKey] = p_LoginRequest;  // PartyName Temp
 
     // COMMENT TO ALLOW DEBUGGING
-    setTimeout (function () 
-        {
-            if (m_waitingAccounts.hasOwnProperty(p_tempLoginKey))
-            {
-                delete m_waitingAccounts[p_tempLoginKey]; // = undefined;
-            }
-        }, CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT);
+    setTimeout(function () {
+        if (m_waitingAccounts.hasOwnProperty(p_tempLoginKey)) {
+            delete m_waitingAccounts[p_tempLoginKey]; // = undefined;
+        }
+    }, CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT);
 }
 
 
-function fn_cancelLoginRequestBySenderID (p_requestID)
-{
-    if (p_senderID == null) return ;
+function fn_cancelLoginRequestBySenderID(p_requestID) {
+    if (p_senderID == null) return;
 
-    const c_keys = Object.keys (m_waitingAccounts);
+    const c_keys = Object.keys(m_waitingAccounts);
     const c_len = c_keys.length;
 
-    for (var i=0; i< c_len; ++i)
-    {
-        const c_LoginRequest =  m_waitingAccounts [c_keys[i]];
-        if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID)
-        {
-            delete m_waitingAccounts [c_keys[i]];
+    for (var i = 0; i < c_len; ++i) {
+        const c_LoginRequest = m_waitingAccounts[c_keys[i]];
+        if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID) {
+            delete m_waitingAccounts[c_keys[i]];
             c_CommServerManagerClient.fn_onMessageOpened();
-            return ;
+            return;
         }
     }
 }
 
-function fn_closeActiveCOnnectionBySenderID (p_senderID)
-{
-    if (m_activeSenderIDsList.hasOwnProperty (p_senderID) === true)
-    {
+function fn_closeActiveCOnnectionBySenderID(p_senderID) {
+    if (m_activeSenderIDsList.hasOwnProperty(p_senderID) === true) {
         // call close and it already has all cleaning steps in [onClose Event].
-        m_activeSenderIDsList[p_senderID].close();  
+        m_activeSenderIDsList[p_senderID].close();
     }
 }
 
@@ -960,101 +857,92 @@ function fn_closeActiveCOnnectionBySenderID (p_senderID)
  * Called by AUTH server to invalidate a session and close any socket.
  * NOT IMPLEMENTED
  */
-function fn_removeSenderID (p_senderID)
-{
+function fn_removeSenderID(p_senderID) {
     // 1- remove senderID from any waiting to connect list.
-    fn_cancelLoginRequestBySenderID (p_senderID);
-    
+    fn_cancelLoginRequestBySenderID(p_senderID);
+
     // 2- remove senderID from any active connection.
-    fn_closeActiveCOnnectionBySenderID (p_senderID);
+    fn_closeActiveCOnnectionBySenderID(p_senderID);
 }
 
-function fn_getAccountsAsJSON ()
-{
+function fn_getAccountsAsJSON() {
     var andruavUnitArray = [];
     var andruavUnit = {};
     var andruavAccount = {};
     var andruavGroup = {};
 
-    
-    c_ChatAccountRooms.fn_forEach (function (account)
-    {
-            andruavAccount = {};
-            andruavAccount['sid'] = account.m_accountID;
-            andruavAccount.groups = [];
-       
 
-            account.forEach(function (group)
-            {   // get groups
+    c_ChatAccountRooms.fn_forEach(function (account) {
+        andruavAccount = {};
+        andruavAccount['sid'] = account.m_accountID;
+        andruavAccount.groups = [];
 
-                andruavGroup = {};
-                andruavGroup['uuid'] = group.uid;
-                andruavGroup['sid']  = group.m_parentAccount.m_accountID;
-                andruavGroup['grp']  = group.m_ID; // group marker
-                andruavGroup['uid']  = group.m_ID;
-                andruavGroup['TTX']  = group.m_TTX;
-                andruavGroup['BTX']  = group.m_BTX;
-                andruavGroup['Dt']   = group.m_creationDate;
-                andruavGroup['Lt']   = group.m_lastAccessTime;
-                if (group.hasOwnProperty("isFlyingDone"))
-                {
-                    andruavGroup['FL']   = group.m_isFlyingDone;
+
+        account.forEach(function (group) {   // get groups
+
+            andruavGroup = {};
+            andruavGroup['uuid'] = group.uid;
+            andruavGroup['sid'] = group.m_parentAccount.m_accountID;
+            andruavGroup['grp'] = group.m_ID; // group marker
+            andruavGroup['uid'] = group.m_ID;
+            andruavGroup['TTX'] = group.m_TTX;
+            andruavGroup['BTX'] = group.m_BTX;
+            andruavGroup['Dt'] = group.m_creationDate;
+            andruavGroup['Lt'] = group.m_lastAccessTime;
+            if (group.hasOwnProperty("isFlyingDone")) {
+                andruavGroup['FL'] = group.m_isFlyingDone;
+            }
+            else {
+                andruavGroup['FL'] = false;
+            }
+            andruavGroup['lnglat'] = {
+                "lng": group.m_lng,
+                "lat": group.m_lat,
+                "spd": (group.m_speed.toFixed(2)),
+                "alt": group.m_alt.toFixed(2)
+            };
+
+            andruavGroup.units = [];
+
+            andruavAccount.groups.push(andruavGroup);
+
+
+            group.forEach(function (unit) {  // get units
+                andruavUnit = {};
+                andruavUnit['uuid'] = unit.m_loginRequest.m_senderID;
+                andruavUnit['sid'] = account.m_accountID;
+                andruavUnit['uid'] = unit.m_loginRequest.m_senderID;
+                andruavUnit['gcs'] = (unit.m_loginRequest.m_actorType != 'd');
+                andruavUnit['fcb'] = (unit.m_status.m_useFCB == true);
+                if (unit.m_status.hasOwnProperty("FL")) {
+                    andruavUnit['fly'] = unit.m_status.FL;
                 }
-                else
-                {
-                    andruavGroup['FL'] = false;
+                else {
+                    andruavUnit['fly'] = false;
                 }
-                andruavGroup['lnglat'] = {
-                    "lng": group.m_lng,
-                    "lat": group.m_lat,
-                    "spd": (group.m_speed.toFixed(2)),
-                    "alt": group.m_alt.toFixed(2)
+                andruavUnit['TTX'] = unit.m_status.m_TTX;
+                andruavUnit['BTX'] = unit.m_status.m_BTX;
+                andruavUnit['Dt'] = unit.m_loginRequest.m_creationDate;
+                andruavUnit['lnglat'] = {
+                    "lng": unit.m_status.m_lng,
+                    "lat": unit.m_status.m_lat,
+                    "spd": (unit.m_status.m_speed.toFixed(2)),
+                    "alt": unit.m_status.m_alt.toFixed(2)
                 };
-
-                andruavGroup.units = [];
-            
-                andruavAccount.groups.push(andruavGroup);
-                
-                
-                group.forEach(function (unit)
-                {  // get units
-                    andruavUnit = {};
-                    andruavUnit['uuid'] = unit.m_loginRequest.m_senderID;
-                    andruavUnit['sid']  = account.m_accountID;
-                    andruavUnit['uid']  = unit.m_loginRequest.m_senderID;
-                    andruavUnit['gcs']  = (unit.m_loginRequest.m_actorType != 'd');
-                    andruavUnit['fcb']  = (unit.m_status.m_useFCB == true);
-                    if (unit.m_status.hasOwnProperty("FL"))
-                    {
-                        andruavUnit['fly'] = unit.m_status.FL;
-                    }
-                    else
-                    {
-                        andruavUnit['fly'] = false;
-                    }
-                    andruavUnit['TTX'] = unit.m_status.m_TTX;
-                    andruavUnit['BTX'] = unit.m_status.m_BTX;
-                    andruavUnit['Dt'] = unit.m_loginRequest.m_creationDate;
-                    andruavUnit['lnglat'] = {
-                        "lng": unit.m_status.m_lng,
-                        "lat": unit.m_status.m_lat,
-                        "spd": (unit.m_status.m_speed.toFixed(2)),
-                        "alt": unit.m_status.m_alt.toFixed(2)
-                    };
-                    andruavGroup.units.push(andruavUnit);
-                });
+                andruavGroup.units.push(andruavUnit);
             });
+        });
 
-             andruavUnitArray.push(andruavAccount);
+        andruavUnitArray.push(andruavAccount);
     });
-    
 
-    return {'accounts':andruavUnitArray};
+
+    return { 'accounts': andruavUnitArray };
 }
 
 module.exports = {
     fn_startServer: fn_startServer,
     fn_addWaitingAccount: fn_addWaitingAccount,
     fn_removeSenderID: fn_removeSenderID,
-    fn_getAccountsAsJSON: fn_getAccountsAsJSON 
+    fn_getAccountsAsJSON: fn_getAccountsAsJSON
 };
