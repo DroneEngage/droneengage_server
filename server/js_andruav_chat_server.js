@@ -74,7 +74,7 @@ function send_message_toMyGroup(message, isbinary, ws) {
 
     try {
         if (ws.m__group != null) {
-            ws.m__group.broadcast(message, isbinary, ws);
+            ws.m__group.fn_broadcast(message, isbinary, ws);
         }
     }
     catch (e) {
