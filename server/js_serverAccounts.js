@@ -1,4 +1,3 @@
-
 const { v4: uuidv4 } = require('uuid');
 const c_dumpError = require("./js_dumperror.js");
 
@@ -6,105 +5,71 @@ function consoleLog(text) {
     console.log(text);
 }
 
-
 function AccountsMaster() {
-    // list of Account
     this._accounts = {};
 }
 
-
-
 AccountsMaster.prototype.getUnitKeys = function () {
     return Object.keys(this._accounts);
-
 };
-
 
 AccountsMaster.prototype.getUnitValues = function () {
     return Object.values(this._accounts);
-
 };
 
-
 AccountsMaster.prototype.getUnitCount = function () {
-    if (andruavClient.andruavUnitList == null) return 0;
     return Object.keys(this._accounts).length;
 };
 
-
 AccountsMaster.prototype.fn_add_member_toGroup = function (p_unitname, p_groupname, p_websocket) {
-    var id = p_websocket.m_andruavParams.SID;
-    var acc;
+    const id = p_websocket.m_andruavParams.SID;
+    let acc;
     if (this._accounts.hasOwnProperty(id)) {
         // account already exists
-        consoleLog("account " + id + " already exists")
+        consoleLog(`account ${id} already exists`);
         acc = this._accounts[id];
-    }
-    else {
+    } else {
         // account does not exist
-        consoleLog("account " + id + " created")
+        consoleLog(`account ${id} created`);
         acc = this._accounts[id] = new Account(id);
     }
 
     return acc.fn_add_member_toGroup(p_unitname, p_groupname, p_websocket);
-}
+};
 
 
 
 AccountsMaster.prototype.del_member_fromGroup = function (p_websocket) {
-    if (p_websocket.hasOwnProperty("group") == false) {
+    if (!p_websocket.hasOwnProperty("group")) {
         // socket is not linked to any group
-        consoleLog("del_member_fromGroup : Nothing to Delete");
+        consoleLog("del_member_fromGroup: Nothing to Delete");
         return;
     }
-
-    if (p_websocket.name == null)  // undefined or null
-    {
+    if (p_websocket.name == null) {
         delete p_websocket.group;
-
         consoleLog('No unit name to remove');
         return;
     }
-
     return p_websocket.group.fn_deleteMemberByName(p_websocket.name);
-
-}
-
-
+};
 
 AccountsMaster.prototype.fn_del_member_fromAccountByName = function (p_unitname, accountID, terminateSocket) {
-
-    var acc = this._accounts[accountID];
-
+    const acc = this._accounts[accountID];
     if (acc == null) {
-        consoleLog("info: no account associated with socket .... This could be a brand new socket.");
-
-
+        consoleLog("info: No account associated with socket. This could be a brand new socket.");
         return;
     }
-
     acc.fn_del_member_fromAccountByName(p_unitname, terminateSocket);
-
-}
-
-
+};
 
 AccountsMaster.prototype.forEach = function (callback) {
-    var keys = Object.keys(this._accounts);
-    var len = keys.length;
-    //consoleLog ("AccountsMaster.forEach Keys:" + keys);
-    for (var i = 0; i < len; ++i) {
+    const keys = Object.keys(this._accounts);
+    const len = keys.length;
+    for (let i = 0; i < len; ++i) {
         callback(this._accounts[keys[i]]);
     }
-}
-
-
-
+};
 ///////////////////////////////////////////////////  Account
-
-
-
-
 function Account(id) {
     this.ID = id;
     this._groups = {};
@@ -118,47 +83,36 @@ function Account(id) {
  * Returns: true/false
  ***/
 Account.prototype.fn_add_member_toGroup = function (p_unitname, p_groupname, p_websocket) {
-    var gr;
+    let gr;
     if (this._groups.hasOwnProperty(p_groupname)) {
         // group already exists
-        consoleLog("group " + p_groupname + " already exists")
-
+        consoleLog(`group ${p_groupname} already exists`);
         gr = this._groups[p_groupname];
-    }
-    else {
+    } else {
         // group does not exist
-        consoleLog("group " + p_groupname + " created")
-
+        consoleLog(`group ${p_groupname} created`);
         gr = this._groups[p_groupname] = new Group(this, p_groupname);
     }
-
     return gr.fn_addMember(p_unitname, p_websocket);
-}
+};
 
 /***
  * Searchs in all groups and remove all sockets with that name.
  ***/
 Account.prototype.fn_del_member_fromAccountByName = function (p_unitname, terminateSocket) {
-    this.forEach(function (group) {
+    this.forEach(group => {
         group.fn_deleteMemberByName(p_unitname, terminateSocket);
     });
-}
-
+};
 
 Account.prototype.forEach = function (callback) {
-    var keys = Object.keys(this._groups);
-    var len = keys.length;
-    //consoleLog ("Account.forEach Keys:" + keys);
-    for (var i = 0; i < len; ++i) {
+    const keys = Object.keys(this._groups);
+    const len = keys.length;
+    for (let i = 0; i < len; ++i) {
         callback(this._groups[keys[i]]);
     }
-}
+};
 
-///////////////////////////////////////// GROUP
-
-/***
- * Group Object
- ***/
 function Group(account, id) {
     this.ID = id;
     this._parentAccount = account; //  u should make this == null if you want to delete this object.
@@ -168,7 +122,6 @@ function Group(account, id) {
     this.TTX = 0;
     this.m_creationDate = new Date();
     this.lastAccessTime = new Date();
-    this.m_andruavSockets = new Map();
     this.lng = 0;
     this.lat = 0;
     this.m_speed = 0.0;
@@ -223,88 +176,51 @@ Group.prototype.deleteMember = function (p_websocket)
 Group.prototype.fn_deleteMemberByName = function (p_unitname, terminateSocket) {
     try {
         if (this._units.hasOwnProperty(p_unitname)) {
-
-            consoleLog("fn_deleteMemberByName: deleteMember " + p_unitname);
-
-
-            // this is a socket under the same name 
-            var oldSocket = this._units[p_unitname];
+            consoleLog(`fn_deleteMemberByName: deleteMember ${p_unitname}`);
+            const oldSocket = this._units[p_unitname];
             delete this._units[p_unitname];
             delete oldSocket.group;
-            if (terminateSocket == true) {
-
-                consoleLog("fn_deleteMemberByName: terminateSocket " + p_unitname);
-
-
-                oldSocket.fn_register_db(oldSocket);
+            if (terminateSocket) {
+                consoleLog(`fn_deleteMemberByName: terminateSocket ${p_unitname}`);
+                if (typeof oldSocket.fn_register_db === 'function') {
+                    oldSocket.fn_register_db();
+                }
                 oldSocket.terminate();
             }
-
         }
-    }
-    catch (e) {
+    } catch (e) {
         c_dumpError.fn_dumperror(e);
     }
-}
+};
 
 Group.prototype.forEach = function (callback) {
-    var keys = Object.keys(this._units);
-    var len = keys.length;
-    // consoleLog ("Group.forEach Keys:" + keys);
-
-    for (var i = 0; i < len; ++i) {
+    const keys = Object.keys(this._units);
+    const len = keys.length;
+    for (let i = 0; i < len; ++i) {
         callback(this._units[keys[i]]);
     }
-}
-
+};
 
 Group.prototype.fn_sendToIndividual = function (message, v_isBinary, target) {
     try {
-
-        //xconsoleLog ('func: send fn_sendToIndividual %s' ,target);
-        var socket = this._units[target];
-        if (socket != null) {
-            //xconsoleLog ('func: send message to %s' ,socket.Name);
-
-            socket.send(message,
-                {
-                    binary: v_isBinary
-                });
-            return;
+        const socket = this._units[target];
+        if (socket) {
+            socket.send(message, { binary: v_isBinary });
         }
-    }
-    catch (e) {
-        consoleLog('fn_broadcast :ws:' + socket.Name + ' Orphan socket Error:' + e);
+    } catch (e) {
+        consoleLog(`fn_sendToIndividual: Error sending to ${target}: ${e}`);
         c_dumpError.fn_dumperror(e);
-        // if (e.message == "not opened")
-        // {
-        consoleLog('========================================');
-        if (socket != null) { // Most propably this is the same socket disconnected silently.
-
-            try {
-                socket.group.fn_deleteMemberByName(socket.name);
-
-                consoleLog('unit' + socket.Name + ' found dead');
-                /////////fn_register_db(oldSocket);
-                //oldSocket.Name = null; // to prevent onClose ->unregister->del_member_fromGroup so deletes the new record.
-                socket.fn_register_db();
-                delete socket.name;
-
-                socket.terminate();
-
-            }
-            catch (e) {
-                c_dumpError.fn_dumperror(e);
-            }
+        if (socket) { // Most propably this is the same socket disconnected silently.
+            consoleLog('unit' + socket.Name + ' found dead');
+            this.fn_deleteMemberByName(socket.name, true);
         }
-        //}
     }
+};
 
-}
 
 Group.prototype.fn_broadcast = function (message, v_isBinary, ws) {
-    var keys = Object.keys(this._units);
-    var len = keys.length;
+    const keys = Object.keys(this._units);
+    const len = keys.length;
     // consoleLog ("Group.forEach Keys:" + keys);
 
     for (var i = 0; i < len; ++i) {
@@ -347,20 +263,17 @@ Group.prototype.fn_broadcast = function (message, v_isBinary, ws) {
 }
 
 
-
 exports.m_andruavSocket = function m_andruavSocket() {
-    //this.RX=0;
-    //this.TX=0;
-
     this.fn_init = function () {
         this.lng = 0;
         this.lat = 0;
         this.m_speed = 0.0;
         this.alt = 0.0;
-    }
+    };
 
-
-}
-
+    this.fn_register_db = function () {
+        // Placeholder for potential future implementation
+    };
+};
 
 exports.AccountMaster = new AccountsMaster();
