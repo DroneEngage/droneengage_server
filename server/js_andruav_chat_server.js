@@ -1,5 +1,6 @@
 "use strict";
 const heapdump = require('heapdump');
+const path = require('path');
 
 /**
  * Routes communication between different parties.
@@ -17,6 +18,37 @@ const m_waitingAccounts = {};
 const m_activeSenderIDsList = {};
 const m_activeUdpProxy = {};
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
+
+let c_commandProcessors = []; // Array to store loaded plugins
+
+
+if (global.m_serverconfig.m_configuration?.command_plugin) {
+    global.m_serverconfig.m_configuration.command_plugin.forEach((pluginPath) => {
+        try {
+            
+            // Step 1: Navigate up one level from __dirname to reach the andruav_server folder
+            const baseDir = path.join(__dirname, '..'); // Goes up to andruav_server
+
+            // Step 2: Resolve the pluginPath relative to the baseDir
+            const resolvedPath = path.resolve(baseDir, pluginPath);
+
+            const processor = require(resolvedPath);
+
+            if (processor?.fn_processCommand) {
+                c_commandProcessors.push(processor);
+            } else {
+                console.warn(`Plugin at ${pluginPath} is loaded, but fn_processCommand is not available.`);
+            }
+        } catch (error) {
+            console.error(`Failed to load plugin at ${pluginPath}:`, error);
+        }
+    });
+} else {
+    console.warn("No command plugins specified in configuration.");
+}
+
+
+ 
 
 var v_andruavTasks;
 
@@ -219,8 +251,9 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
         }
          
-        var v_jmsg = null;
-        var p_message_w_permission = null;
+        let v_jmsg = null;
+        let p_message_w_permission = null;
+        const nullIndex = p_message.indexOf(0);
         if (p_isBinary == true)
         {
             try
@@ -233,7 +266,7 @@ function fn_onConnect_Handler(p_ws,p_req)
                 //     p_ws.m__group.m_lastAccessTime = Date.now(); // BUG: sometimes this variable is null.
                 // }
                 // LEAK IS HERE
-                const nullIndex = p_message.indexOf(0);
+                
                 if (nullIndex !== -1) {
                     const c_buff = p_message.slice(0, nullIndex);
                     const c_str = c_buff.toString('utf8');
@@ -290,6 +323,16 @@ function fn_onConnect_Handler(p_ws,p_req)
             }
         }
 
+        // Call Plugins if Available
+        c_commandProcessors.forEach(element => {
+                element.fn_processCommand(p_ws, p_message, v_jmsg, nullIndex,
+                    function (p_param1, p_param2)
+                    {
+    
+                        return ;
+                    });
+            });
+        
         p_message = null;
         
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING])
@@ -711,7 +754,7 @@ function fn_onConnect_Handler(p_ws,p_req)
     {
         //console.log ("debug ... fn_onWsMessage code: " + p_msg);
         let v_isBinary = false;
-        if (p_msg[p_msg.length-1] !== 125)
+        if (typeof(p_msg) !== 'string')
         {
             v_isBinary = true;
         }
