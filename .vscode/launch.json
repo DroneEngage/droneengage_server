@@ -28,6 +28,38 @@
       "name": "Production Program",
       "program": "${workspaceRoot}/server.js",
       "args": ["--config=server.config"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "DroneServer",
+      "program": "${workspaceRoot}/server.js",
+      "args": ["--config=server.s2s.drone.config"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Super Server",
+      "program": "${workspaceRoot}/server.js",
+      "args": ["--config=server.s2s.super.config"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Auth & Connect",
+      "program": "${workspaceRoot}/test/test_fully_connect_to_comm_server.js"
+    }
+    ,
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "name": "Flying Socket",
+      "args": ["127.0.0.1", 9967, 5, "33234", "1234"],
+      "program": "${workspaceRoot}/test/test_connect_as_unit.js"
     }
   ]
 }

@@ -2,10 +2,94 @@
 
 const m_commServerManagerClient = require("./js_comm_server_manager_client");
 var m_agent_chat_server;
-const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms");
+const c_ChatAccountRooms = require("./chat_server/js_andruav_chat_account_rooms");
 const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
 const v_version = require('../package.json').version;
+
+const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
+
+const m_waitingAccounts = {};
+
+
+function isLoginExist (p_key){
+    return m_waitingAccounts[p_key] != null;
+}
+
+function getLogin(p_key)
+{
+    return m_waitingAccounts[p_key] || null;
+}
+
+function deleteLogin(p_key)
+{
+    if (p_key == null)
+        return;
+    if (m_waitingAccounts[p_key] == null)
+        return;
+    delete m_waitingAccounts[p_key];
+}
+
+
+
+
+
+
+/**
+ * Called by AUTH server to invalidate a session and close any socket.
+ * NOT IMPLEMENTED
+ */
+function fn_removeSenderID(p_senderID) {
+    // 1- remove senderID from any waiting to connect list.
+    fn_cancelLoginRequestBySenderID(p_senderID);
+
+    // 2- remove senderID from any active connection.
+    fn_closeActiveConnectionBySenderID(p_senderID);
+}
+
+
+function fn_cancelLoginRequestBySenderID(p_requestID) {
+    if (p_senderID == null) return;
+
+    const c_keys = Object.keys(m_waitingAccounts);
+    const c_len = c_keys.length;
+
+    for (var i = 0; i < c_len; ++i) {
+        const c_LoginRequest = m_waitingAccounts[c_keys[i]];
+        if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID) {
+            delete m_waitingAccounts[c_keys[i]];
+            c_CommServerManagerClient.fn_onMessageOpened();
+            return;
+        }
+    }
+}
+
+
+function fn_closeActiveConnectionBySenderID(p_senderID) {
+    // if (m_activeSenderIDsList.hasOwnProperty(p_senderID) === true) {
+    //     // call close and it already has all cleaning steps in [onClose Event].
+    //     m_activeSenderIDsList[p_senderID].close();
+    // }
+}
+
+
+/**
+ * 
+ * @param {*} p_tempLoginKey key sent by AuthServer
+ * @param {*} p_LoginRequest p_cmd.d{a: SID, at: actor type (d for drone) d, 
+ *  b:GroupID=1, 
+ *  r: requestID GUID, 
+ *  f: login_temp_key (same as p_tempLoginKey)}
+ */
+function fn_addWaitingAccount(p_tempLoginKey, p_LoginRequest) {
+    m_waitingAccounts[p_tempLoginKey] = p_LoginRequest;  // PartyName Temp
+
+    // COMMENT TO ALLOW DEBUGGING
+    setTimeout(function () {
+        deleteLogin(p_tempLoginKey);
+    }, CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT);
+}
+
 
 /**
  * Decrypt message from Auth server. 
@@ -67,7 +151,7 @@ function fn_handleLoginResponses(p_cmd) {
     // Agent will use this key to connect to AndruavServer.
     p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = uuidv4().replaceAll('-', '');
     // add it to waiting list so that can be either deleted when timeout or retrieved when agent connects to AndruavServer.            
-    m_agent_chat_server.fn_addWaitingAccount(p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()], p_cmd.d);
+    fn_addWaitingAccount(p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()], p_cmd.d);
     console.log("New Party: " + JSON.stringify(p_cmd));
 
     const c_reply = fn_generateLoginRequestReply(p_cmd);
@@ -147,7 +231,7 @@ function fn_updateServerWatchdog() {
  */
 function fn_startServer() {
 
-    console.log(global.Colors.Success + "[OK] Communication Server Started" + global.Colors.Reset);
+    console.log(global.Colors.FgYellow + "Communication Server Starting..." + global.Colors.Reset);
 
     if (global.m_serverconfig.m_configuration.allow_fake_SSL === true) {
         // ATTENTION: should be FALSE in PRODUCTION
@@ -162,9 +246,12 @@ function fn_startServer() {
     }
 
 
-    m_commServerManagerClient.fn_onMessageReceived = fn_AuthServerMessagesHandler;
-    m_commServerManagerClient.fn_onMessageOpened = fn_AuthServerConnectionHandler;
-    m_commServerManagerClient.fn_startServer();
+    if (global.m_serverconfig.m_configuration.ignore_auth_server !== true) {
+        m_commServerManagerClient.fn_onMessageReceived = fn_AuthServerMessagesHandler;
+        m_commServerManagerClient.fn_onMessageOpened = fn_AuthServerConnectionHandler;
+    
+        m_commServerManagerClient.fn_startServer();
+    }
     m_agent_chat_server = global.m_chat_server_singelton_get_instance();
     m_agent_chat_server.fn_startServer();
 
@@ -173,4 +260,7 @@ function fn_startServer() {
 
 module.exports = {
     fn_startServer: fn_startServer,
+    isLoginExist: isLoginExist,
+    getLogin: getLogin,
+    deleteLogin: deleteLogin
 };
