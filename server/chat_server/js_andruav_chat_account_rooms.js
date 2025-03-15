@@ -7,7 +7,7 @@
 
 
 const { v4: uuidv4 } = require('uuid');
-const _dumpError = require("../dumperror.js");
+const _dumpError = require("../../dumperror.js");
 
 
 const c_accounts = {};
@@ -24,7 +24,47 @@ function fn_getUnitCount() {
     return Object.keys(c_accounts).length;
 }
 
-function fn_add_member_toGroup(p_ws) {
+
+/**
+ * Sends a message to all Ground Control Stations (GCS) in ALL ACCounts.
+ * @param {*} message 
+ * @param {*} isBinary 
+ * @param {*} senderId 
+ */
+function fn_sendToAllGCS(message, isBinary, senderId) {
+    Object.values(c_accounts).forEach(account => {
+        Object.values(account.m_groups).forEach(group => {
+            group.fn_broadcastToGCS(message, isBinary, senderId);
+        });
+    });
+}
+
+
+/**
+ * Sends a message to all Agents in ALL ACCounts.
+ * @param {*} message 
+ * @param {*} isBinary 
+ * @param {*} senderId 
+ */
+function fn_sendToAllAgent(message, isBinary, senderId) {
+    Object.values(c_accounts).forEach(account => {
+        Object.values(account.m_groups).forEach(group => {
+            group.fn_broadcastToDrone(message, isBinary, senderId);
+        });
+    });
+}
+
+
+function fn_sendToAll (message, isBinary, senderId) {
+    Object.values(c_accounts).forEach(account => {
+        Object.values(account.m_groups).forEach(group => {
+            group.fn_broadcast(message, isBinary, senderId);
+        });
+    });
+}
+
+
+function fn_add_member_to_AccountGroup(p_ws) {
     const c_loginRequest = p_ws.m_loginRequest;
     const v_id = c_loginRequest.m_accountID;
     let v_acc;
@@ -40,7 +80,7 @@ function fn_add_member_toGroup(p_ws) {
         c_accounts[v_id] = v_acc;
     }
 
-    return v_acc.fn_add_member_toGroup(c_loginRequest.m_senderID, c_loginRequest.m_groupID, p_ws);
+    return v_acc.fn_add_member_to_AccountGroup(c_loginRequest.m_senderID, c_loginRequest.m_groupID, p_ws);
 }
 
 
@@ -97,7 +137,7 @@ function Account(p_accountID) {
  * Account/Group are created if any not existed.
  * Returns: true/false
  ***/
-Account.prototype.fn_add_member_toGroup = function (p_unitname, p_groupname, p_ws) {
+Account.prototype.fn_add_member_to_AccountGroup = function (p_unitname, p_groupname, p_ws) {
     let gr;
 
     if (this.m_groups.hasOwnProperty(p_groupname)) {
@@ -140,21 +180,13 @@ function Group(m_accountObj, p_ID) {
     this.m_BTX = 0;
     this.m_lastAccessTime = 0;
 
-    this.m_lng = 0;
-    this.m_lat = 0;
-    this.m_speed = 0;
-    this.m_alt = 0;
-    this.m_gps = false;
-    this.m_isFlyingDone = false;
-
-
     Object.seal(this);
 }
 
 
 
 /***
- * This is a Facade Layer that addes a member to a group.
+ * This is a Facade Layer that adds a member to a group.
  * Account/Group are created if any not existed.
  * Returns: true/false
  ***/
@@ -200,11 +232,13 @@ Group.prototype.forEach = function (callback) {
     Object.values(this.m_units).forEach(callback);
 }
 
-Group.prototype.fn_sendToIndividual = function (message, isbinary, target) {
+Group.prototype.fn_sendToIndividual = function (message, isbinary, target, onNotFound) {
     try {
         const socket = this.m_units[target];
         if (socket != null) {
             socket.send(message, { binary: isbinary });
+        } else {
+            onNotFound && onNotFound(target);
         }
     } catch (e) {
         console.log(`broadcast :ws:${socket.Name} Orphan socket Error: ${e}`);
@@ -213,20 +247,21 @@ Group.prototype.fn_sendToIndividual = function (message, isbinary, target) {
     }
 }
 
-Group.prototype.fn_broadcastToGCS = function (p_message, isbinary, c_ws) {
-    this.fn_broadcast(p_message, isbinary, c_ws, 'g');
+Group.prototype.fn_broadcastToGCS = function (p_message, isbinary, senderID) {
+    this.fn_broadcast(p_message, isbinary, senderID, 'g');
 }
 
-Group.prototype.fn_broadcastToDrone = function (p_message, p_isbinary, c_ws) {
-    this.fn_broadcast(p_message, p_isbinary, c_ws, 'd');
+Group.prototype.fn_broadcastToDrone = function (p_message, p_isbinary, senderID) {
+    this.fn_broadcast(p_message, p_isbinary, senderID, 'd');
 }
 
-Group.prototype.fn_broadcast = function (p_message, p_isbinary, c_ws, p_actorType = null) {
-    const sender_id = c_ws.m_loginRequest.m_senderID;
-
+Group.prototype.fn_broadcast = function (p_message, p_isbinary, senderID, p_actorType = null) {
+    // I am using c_ws.m_loginRequest.m_senderID instead of p_message.sd 
+    // to prevent sender socket from deceiving the server as m_senderID is recieved from AUTH Server.
+    
     for (const [_, socket] of Object.entries(this.m_units)) {
         try {
-            if (socket.m_loginRequest.m_senderID !== sender_id &&
+            if (socket.m_loginRequest.m_senderID !== senderID &&
                 (p_actorType === null || socket.m_loginRequest.m_actorType === p_actorType)) {
                 socket.send(p_message, { binary: p_isbinary });
             }
@@ -255,8 +290,11 @@ module.exports = {
     fn_getUnitKeys,
     fn_getUnitValues,
     fn_getUnitCount,
-    fn_add_member_toGroup,
+    fn_add_member_to_AccountGroup,
     fn_del_member_fromGroup,
     fn_del_member_fromAccountByName,
     fn_forEach,
+    fn_sendToAllGCS,
+    fn_sendToAllAgent,
+    fn_sendToAll,
 };

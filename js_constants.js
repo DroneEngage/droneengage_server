@@ -40,6 +40,13 @@ exports.CONST_WS_MSG_ROUTING_GROUP              = "g";
 exports.CONST_WS_MSG_ROUTING_INDIVIDUAL         = "i";
 exports.CONST_WS_MSG_ROUTING_SYSTEM             = "s";
 
+exports.CONST_ACTOR_TYPE_GCS                    = 'g';
+exports.CONST_ACTOR_TYPE_DRONE                  = 'd';
+
+exports.CONST_WS_SENDER_COMM_SERVER             = '_SYS_';
+exports.CONST_WS_SENDER_ALL_GCS                 = '_GCS_';
+exports.CONST_WS_SENDER_ALL                     = '_GD_';
+exports.CONST_WS_SENDER_ALL_AGENTS              = '_AGN_';
 /////////////EO-Reply with COMM-Servers
 
 
