@@ -59,7 +59,7 @@ function fn_startServer() {
     Me = this;
     const c_url = `wss://${global.m_serverconfig.m_configuration.s2s_ws_target_ip}:${global.m_serverconfig.m_configuration.s2s_ws_target_port}`;
 
-    console.log(`${global.Colors.Success}[OK] Comm Server Manager Client connecting to ${c_url} to reach AndruavAuth${global.Colors.Reset}`);
+    console.log(`${global.Colors.BSuccess}[OK] Comm Server Manager Client connecting to ${c_url} to reach AndruavAuth${global.Colors.Reset}`);
     fn_startWebSocketListener(c_url);
 }
 

@@ -1,23 +1,45 @@
 "use strict";
 
 const v_pjson           = require('./package.json');
+const hlp_string        = require('./helpers/hlp_strings.js');
 global.Colors           = require ("./helpers/js_colors.js").Colors;
 global.m_serverconfig   = require ('./js_serverConfig.js'); 
 
 
 
-var v_configFileName = global.m_serverconfig.getFileName();
+let v_configFileName = global.m_serverconfig.getFileName();
 
 
 
-let m_andruav_comm_server = require ('./server/js_andruav_comm_server.js')
-
+const m_andruav_comm_server = require ('./server/js_andruav_comm_server.js')
+global.m_andruav_channel_parent_server = require ('./server/server_to_server/js_parent_comm_server.js');
+global.m_andruav_channel_child_socket = require ('./server/server_to_server/js_child_comm_server.js');
 
 
 process.on('SIGINT', function() {
     if (global.m_logger) global.m_logger.Warn('SIGINT.');
     process.exit(0);
 });
+
+
+function checkMemory()
+    {
+        const used = process.memoryUsage();
+        let readings = "";
+        for (let key in used) {
+            readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
+        }
+        console.log(readings);
+
+        // Check memory limit
+        if (global.m_serverconfig.m_configuration.memory_max != null) {
+            const mem = Math.round(used.rss / 1024 / 1024 * 100) / 100;
+            if (global.m_serverconfig.m_configuration.memory_max < mem) {
+                console.log("Memory is " + global.Colors.FgYellow + mem + global.Colors.Error + ' RESTART' + global.Colors.Reset);
+                process.exit(1);
+            }
+        }
+    }
 
 function fn_displayHelp ()
 {
@@ -33,9 +55,9 @@ function fn_displayHelp ()
 
 function fn_displayInfo ()
 {
-    console.log ("==================================")
+    console.log ("=============================================")
     console.log (global.Colors.Bright + "DE Communication Server version " +  JSON.stringify(v_pjson.version) + global.Colors.Reset);
-    console.log ("----------------------------------");
+    console.log ("---------------------------------------------");
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
     console.log ("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.server_port + global.Colors.Reset);
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
@@ -76,7 +98,7 @@ function fn_displayInfo ()
     }
     
     console.log ("Datetime: %s", new Date());
-    console.log ("==================================");
+    console.log ("=====================================================================");
 }
 
 
@@ -118,7 +140,7 @@ function fn_initSingletons()
     {
         if (global.m_chat_server_singelton_instance === undefined)
         {
-            global.m_chat_server_singelton_instance = require ('./server/js_andruav_chat_server.js');
+            global.m_chat_server_singelton_instance = require ('./server/chat_server/js_andruav_chat_server.js');
         }
         
         return global.m_chat_server_singelton_instance;
@@ -130,6 +152,8 @@ function fn_initSingletons()
  */
 function fn_startServer ()
 {
+    // checking memory
+    setInterval(checkMemory, 10000);
 
     // parse input arguments
     fn_parseArgs();
@@ -144,6 +168,23 @@ function fn_startServer ()
     fn_displayInfo();
     m_andruav_comm_server.fn_startServer();
 
+    if (global.m_serverconfig.m_configuration.enable_super_server === true)
+    {
+        m_andruav_channel_parent_server.getInstance(
+            global.m_serverconfig.m_configuration.s2s_super_server_ip,
+            global.m_serverconfig.m_configuration.s2s_super_server_port
+        );
+    }
+
+
+    if (global.m_serverconfig.m_configuration.enable_persistant_relay === true)
+    {
+        m_andruav_channel_child_socket.getInstance(
+            global.m_serverconfig.m_configuration.s2s_relay_to_super_server_ip,
+            global.m_serverconfig.m_configuration.s2s_relay_to_super_server_port
+        );
+    }
+    
    
 }
 
