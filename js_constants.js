@@ -22,7 +22,7 @@ exports.CONST_CS_CMD_LOGOUT_REQUEST             = 'c';
 
 exports.CONST_CS_ACCOUNT_ID                     = 'a';
 exports.CONST_CS_GROUP_ID                       = 'b';
-exports.CONST_CS_SENDER_ID                      = 'c';
+exports.CONST_CS_SENDER_ID                      = 's';
 exports.CONST_CS_LOGIN_TEMP_KEY                 = 'f';
 exports.CONST_CS_ERROR                          = 'e';   
 exports.CONST_CS_SERVER_PUBLIC_HOST             = 'g'; 

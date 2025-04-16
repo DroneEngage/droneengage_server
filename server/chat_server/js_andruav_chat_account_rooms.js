@@ -63,6 +63,14 @@ function fn_sendToAll (message, isBinary, senderId) {
     });
 }
 
+function fn_sendTIndividualId (message, isBinary, senderId, cb) {
+    Object.values(c_accounts).forEach(account => {
+        Object.values(account.m_groups).forEach(group => {
+            group.fn_sendToIndividual(message, isBinary, senderId), cb;
+        });
+    });
+}
+
 
 function fn_add_member_to_AccountGroup(p_ws) {
     const c_loginRequest = p_ws.m_loginRequest;
@@ -297,4 +305,5 @@ module.exports = {
     fn_sendToAllGCS,
     fn_sendToAllAgent,
     fn_sendToAll,
+    fn_sendTIndividualId
 };
