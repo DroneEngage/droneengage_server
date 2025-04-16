@@ -5,7 +5,7 @@ const args = process.argv.slice(2);
 
 if (args.length !== 5) {
   console.error(
-    'Usage: node your_script.js <ip> <port> <resendRate> <hash> <party_ID>'
+    'Usage: node test_connect_as_unit.js <ip> <port> <resendRate> <hash> <party_ID>'
   );
   process.exit(1);
 }

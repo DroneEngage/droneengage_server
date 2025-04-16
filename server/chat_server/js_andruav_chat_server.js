@@ -137,11 +137,12 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
      */
     function acceptLocalConnection(c_params, p_ws)
     {
+        const sender_id = c_params[c_CONSTANTS.CONST_CS_SENDER_ID.toString()];
         const c_onb = {};
-        c_onb.m_senderID = c_params.s;
+        c_onb.m_senderID = sender_id;
         c_onb.m_accountID = global.m_serverconfig.m_configuration.local_server_account_id==null?'1':global.m_serverconfig.m_configuration.local_server_account_id;
         c_onb.m_groupID = '1';
-        c_onb.m_requestID = c_params.s;
+        c_onb.m_requestID = sender_id;  // !Change it to a random number
         c_onb.m_actorType = c_params.at==null?'a':c_params.at;  // use suggested actor type.
         c_onb.m_prm = 0xffffffff;
         c_onb.m_creationDate = Date.now();
@@ -166,7 +167,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             const c_loginRequest = c_andruav_comm_server.getLogin(v_loginTempKey);
             if (c_loginRequest != null) {
                 const c_onb = {};
-                c_onb.m_senderID = c_params['s']; // !THIS IS WRONG. SenderID should be as a SYS message to allow encryption
+                c_onb.m_senderID = c_params[c_CONSTANTS.CONST_CS_SENDER_ID.toString()]; // !THIS IS WRONG. SenderID should be as a SYS message to allow encryption
                 c_onb.m_accountID = c_loginRequest[c_CONSTANTS.CONST_CS_ACCOUNT_ID.toString()];
                 c_onb.m_groupID = c_loginRequest[c_CONSTANTS.CONST_CS_GROUP_ID.toString()];
                 c_onb.m_requestID = c_loginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
@@ -205,7 +206,6 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
      */
     function fn_parseExternalMessage(p_message, p_isBinary) {
         let v_jmsg = null;
-        let p_message_w_permission = null;
         const nullIndex = p_message.indexOf(0);
         let senderID = null;
         if (p_isBinary == true) {
@@ -221,10 +221,6 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                     v_jmsg = JSON.parse(p_message);
                 }
                 senderID = v_jmsg.sd;
-
-                //p_message_w_permission = p_message; //Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
-
-
             }
             catch {
                 return;
@@ -280,7 +276,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                 break;
                             default:
                                 // ONE to ONE Message
-                                send_message_toTarget(p_message, p_isBinary, v_jmsg.tg, p_ws, function onNotFound()
+                                c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, function onNotFound()
                                 {
                                     // TODO: DONT PROPAGATE MORE
                                 });
@@ -415,25 +411,43 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                         switch (v_jmsg['tg']) {
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_GCS:
                                 // Target is GCS regardless who the sender is means [broadcast] to all GCS.
-                                send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                                if (p_ws!=null){
+                                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                                }
+                                
                                 forwardMessage(p_message_w_permission, p_isBinary, p_ws);
+                                
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL:
                                 // Target is _GD_  means [broadcast] to all units including GCS & drones.
-                                send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                                if (p_ws!=null){
+                                    send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                                }
+                                
                                 forwardMessage(p_message_w_permission, p_isBinary, p_ws);
+                                
+    
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_AGENTS:
                                 // Target is _AGN_  means [broadcast] to all drones.
-                                send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
+                                if (p_ws!=null){
+                                    send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
+                                }
                                 forwardMessage(p_message_w_permission, p_isBinary, p_ws);
+                                
                                 break;
                             default:
                                 // ONE to ONE Message
-                                send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws, function onNotFound()
+                                if (p_ws!=null){
+                                    send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws, function onNotFound()
                                 {
                                     forwardMessage(p_message_w_permission, p_isBinary, p_ws);
                                 });
+                                }
+                                else
+                                {
+                                    forwardMessage(p_message_w_permission, p_isBinary, p_ws);
+                                }
                                 break;
                         }
                         break;
@@ -830,6 +844,16 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
 
         }
 
+
+        function fn_validateKeyLocal(p_params) {
+            //TODO: you can use a fixed RequestID in the config.
+            // or Master Drone can send an KEY to followers to use it when connect.
+            // A system message can set this KEY in  comm_srver.
+            v_loginTempKey = p_params[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()].toString();
+                
+            return true;
+        }
+
         
         
 
@@ -888,25 +912,35 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
         if (global.m_serverconfig.m_configuration.local_server_enabled === true) {
             // Local Server is enabled. No need to wait for AndruavAuth to connect.
             // We assume the connection setup is straightforward and generate our local data.
+            fn_validateKeyLocal(c_params);
 
-            acceptLocalConnection(c_params, p_ws);
+            if (v_loginTempKey != null) {
+                // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
+                acceptLocalConnection(c_params, p_ws);
+            }
+            else {
+                //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
+                p_ws.m_loginRequest = null;
+                p_ws.close();
+            }
+            
         }
         else
         {
 
-        fn_validateKey(c_params);
+            fn_validateKey(c_params);
 
-        if (v_loginTempKey != null) {
-            // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
+            if (v_loginTempKey != null) {
+                // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
 
-            acceptConnection (v_loginTempKey, c_params, p_ws);
+                acceptConnection (v_loginTempKey, c_params, p_ws);
+            }
+            else {
+                //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
+                p_ws.m_loginRequest = null;
+                p_ws.close();
+            }
         }
-        else {
-            //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
-            p_ws.m_loginRequest = null;
-            p_ws.close();
-        }
-}
     
 }
 

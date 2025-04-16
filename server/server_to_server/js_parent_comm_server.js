@@ -59,7 +59,8 @@ class ParentCommServer {
 
       this.clientData.set(clientKey, { child_ws, data: {} }); // Store ws and data
 
-      console.log(`New connection from ${clientKey}`);
+      console.log(`New Child Communication Server Connected from ${global.Colors.BSuccess}${clientKey}${global.Colors.Reset}`);
+      
 
       child_ws.on('close', () => {
         this.clientData.delete(clientKey); // Remove client on close
