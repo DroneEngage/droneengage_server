@@ -963,23 +963,54 @@ function fn_startChatServer() {
     const v_WebSocketServer = require('ws').Server;
     const c_https = require('https');
 
-
+    // HTTPS server options
     const options = {
-        key: v_fs.readFileSync(v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_key_file.toString())),
-        cert: v_fs.readFileSync(v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_cert_file.toString()))
+        key: v_fs.readFileSync(v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_key_file.toString())),
+        cert: v_fs.readFileSync(v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_cert_file.toString()))
     };
 
+    // Create HTTPS server with Express
+    const app = new v_express();
+    const wserver = c_https.createServer(options, app);
 
+    // Start HTTPS server
+    wserver.listen(
+        global.m_serverconfig.m_configuration.server_port,
+        global.m_serverconfig.m_configuration.server_ip,
+        () => {
+            console.log(`HTTPS server started on ${global.m_serverconfig.m_configuration.server_ip}:${global.m_serverconfig.m_configuration.server_port}`);
+        }
+    );
 
-    const wserver = c_https.createServer(options, new v_express());
-    wserver.listen(global.m_serverconfig.m_configuration.server_port, global.m_serverconfig.m_configuration.server_ip); // start websocket server [secure]	
+    // Initialize WebSocket server with compression
+    const v_wss = new v_WebSocketServer({
+        server: wserver,
+        perMessageDeflate: {
+            zlibDeflateOptions: {
+                chunkSize: 1024,
+                memLevel: 7,
+                level: 3 // 1-9; lower is faster, higher is smaller
+            },
+            zlibInflateOptions: {
+                chunkSize: 10 * 1024
+            },
+            threshold: 1024 // Compress messages > 1KB
+        }
+    });
 
-    const v_wss = new v_WebSocketServer(
-        {
-            server: wserver
-        });
+    // WebSocket connection handler
+    v_wss.on('connection', (ws, req) => {
+        console.log(`WebSocket client connected from ${req.socket.remoteAddress}`);
+        fn_onConnect_Handler(ws, req); // Call your existing handler
+    });
 
-    v_wss.on('connection', fn_onConnect_Handler);
+    // Error handling for WebSocket server
+    v_wss.on('error', (error) => {
+        console.error('WebSocket server error:', error);
+    });
+
+    // Return the WebSocket server instance (optional, for further use)
+    return v_wss;
 }
 
 function fn_initTasks() {
