@@ -983,7 +983,9 @@ function fn_startChatServer() {
     );
 
     // Initialize WebSocket server with compression
-    const v_wss = new v_WebSocketServer({
+    let v_wss;
+    if (global.m_serverconfig.m_configuration.ws_compression === true) {
+    v_wss = new v_WebSocketServer({
         server: wserver,
         perMessageDeflate: {
             zlibDeflateOptions: {
@@ -994,9 +996,15 @@ function fn_startChatServer() {
             zlibInflateOptions: {
                 chunkSize: 10 * 1024
             },
-            threshold: 1024 // Compress messages > 1KB
+            threshold: 10 // Compress messages > 1KB
         }
     });
+    }
+    else
+    {
+        v_wss = new v_WebSocketServer({
+        server: wserver});
+    }
 
     // WebSocket connection handler
     v_wss.on('connection', (ws, req) => {
