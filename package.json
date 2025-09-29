@@ -22,7 +22,7 @@
   "dependencies": {
     "ejs": "^3.1.9",
     "express": "^4.19.2",
-    "heapdump": "^0.3.15",
+    "jspack": "^0.0.4",
     "lodash": "^4.17.21",
     "moment": "^2.29.4",
     "mysql2": "^3.5.2",
