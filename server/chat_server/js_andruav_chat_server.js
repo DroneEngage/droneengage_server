@@ -1,5 +1,4 @@
 "use strict";
-const heapdump = require('heapdump');
 const path = require('path');
 
 /**
