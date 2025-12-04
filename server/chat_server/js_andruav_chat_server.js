@@ -512,7 +512,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                     v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL; 
                                     v_jmsg.tg = p_ws.name; // sender = target
                                     v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-                                    c_WS.send(JSON.stringify(v_jmsg));
+                                    p_ws.send(JSON.stringify(v_jmsg));
                                 });
 
 
@@ -578,7 +578,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                         //c_dumpError.fn_dumpdebug (JSON.stringify(v_jmsg));
                                         v_jmsg.mt = res[i].messageType; // rechange command to the saved command.
                                         //c_dumpError.fn_dumpdebug('MESSAGE:'+JSON.stringify(v_jmsg));
-                                        c_WS.send(JSON.stringify(v_jmsg));
+                                        p_ws.send(JSON.stringify(v_jmsg));
                                     }
                                 }
 
@@ -686,7 +686,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                     v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                                     v_jmsg.mt = '9003';
                                     v_jmsg.ms = "Done";
-                                    c_WS.send(JSON.stringify(v_jmsg));
+                                    p_ws.send(JSON.stringify(v_jmsg));
 
                                 }
 
@@ -741,7 +741,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                     v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                                     v_jmsg.mt = '9003';
                                     v_jmsg.ms = "Done";
-                                    c_WS.send(JSON.stringify(v_jmsg));
+                                    p_ws.send(JSON.stringify(v_jmsg));
 
                                 }
 
@@ -874,8 +874,8 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             // also this function is called when terminated a socket when a senderID kicks out an older unit with same senderID.
             // in this case m__terminated = true other wise the new senderID will also kick itself.
             //console.log ("debug ... fn_onWsClose code: " + p_code + " of key " + v_loginTempKey);
-            if (this.hasOwnProperty('m__terminated' == false) || (this.m__terminated == false)) {
-                c_ChatAccountRooms.fn_del_member_fromAccountByName(this.m_loginRequest, true);
+            if ((this.hasOwnProperty('m__terminated') == false) || (this.m__terminated == false)) {
+                c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
             }
 
             // remove from active senderIDs list.
