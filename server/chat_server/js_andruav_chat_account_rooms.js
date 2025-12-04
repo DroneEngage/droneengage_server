@@ -66,7 +66,7 @@ function fn_sendToAll (message, isBinary, senderId) {
 function fn_sendTIndividualId (message, isBinary, senderId, cb) {
     Object.values(c_accounts).forEach(account => {
         Object.values(account.m_groups).forEach(group => {
-            group.fn_sendToIndividual(message, isBinary, senderId), cb;
+            group.fn_sendToIndividual(message, isBinary, senderId, cb);
         });
     });
 }
@@ -249,7 +249,7 @@ Group.prototype.fn_sendToIndividual = function (message, isbinary, target, onNot
             onNotFound && onNotFound(target);
         }
     } catch (e) {
-        console.log(`broadcast :ws:${socket.Name} Orphan socket Error: ${e}`);
+        console.log(`broadcast :ws:Orphan socket Error: ${e}`);
         _dumpError.fn_dumperror(e);
         this.fn_handleOrphanSocket(socket);
     }
