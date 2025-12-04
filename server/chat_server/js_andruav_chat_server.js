@@ -15,7 +15,8 @@ const c_andruav_comm_server = require("../js_andruav_comm_server.js");
 const c_andruav_active_senders = require("./js_andruav_active_senders.js");
 
 const c_PluginManager = require('./pluginManager.js');
-
+const udp = require('../js_udp_proxy.js');
+        
 
 
 
@@ -485,7 +486,6 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
     }
 
     function onSystemMessage(v_jmsg, p_ws){
-        const udp = require('../js_udp_proxy.js');
         
         try {
             switch (v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID]) {
