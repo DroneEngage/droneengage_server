@@ -32,11 +32,12 @@ function fn_getUnitCount() {
  * @param {*} senderId 
  */
 function fn_sendToAllGCS(message, isBinary, senderId) {
-    Object.values(c_accounts).forEach(account => {
-        Object.values(account.m_groups).forEach(group => {
-            group.fn_broadcastToGCS(message, isBinary, senderId);
-        });
-    });
+    for (const accountId in c_accounts) {
+        const account = c_accounts[accountId];
+        for (const groupId in account.m_groups) {
+            account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId);
+        }
+    }
 }
 
 
@@ -47,28 +48,31 @@ function fn_sendToAllGCS(message, isBinary, senderId) {
  * @param {*} senderId 
  */
 function fn_sendToAllAgent(message, isBinary, senderId) {
-    Object.values(c_accounts).forEach(account => {
-        Object.values(account.m_groups).forEach(group => {
-            group.fn_broadcastToDrone(message, isBinary, senderId);
-        });
-    });
+    for (const accountId in c_accounts) {
+        const account = c_accounts[accountId];
+        for (const groupId in account.m_groups) {
+            account.m_groups[groupId].fn_broadcastToDrone(message, isBinary, senderId);
+        }
+    }
 }
 
 
 function fn_sendToAll (message, isBinary, senderId) {
-    Object.values(c_accounts).forEach(account => {
-        Object.values(account.m_groups).forEach(group => {
-            group.fn_broadcast(message, isBinary, senderId);
-        });
-    });
+    for (const accountId in c_accounts) {
+        const account = c_accounts[accountId];
+        for (const groupId in account.m_groups) {
+            account.m_groups[groupId].fn_broadcast(message, isBinary, senderId);
+        }
+    }
 }
 
 function fn_sendTIndividualId (message, isBinary, senderId, cb) {
-    Object.values(c_accounts).forEach(account => {
-        Object.values(account.m_groups).forEach(group => {
-            group.fn_sendToIndividual(message, isBinary, senderId, cb);
-        });
-    });
+    for (const accountId in c_accounts) {
+        const account = c_accounts[accountId];
+        for (const groupId in account.m_groups) {
+            account.m_groups[groupId].fn_sendToIndividual(message, isBinary, senderId, cb);
+        }
+    }
 }
 
 
