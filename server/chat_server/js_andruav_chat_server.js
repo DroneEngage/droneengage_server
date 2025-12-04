@@ -323,22 +323,20 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             try {
                 p_ws.m_status.m_BTX += p_message.length;
 
-                if (nullIndex !== -1) {
-                    const c_buff = p_message.slice(0, nullIndex);
-                    v_jmsg = JSON.parse(c_buff.toString('utf8'));
-                }
-
-                if (v_jmsg == null) {
-                    // bug fix: sometimes text message is sent as binary although it has no binary extension.
-                    v_jmsg = JSON.parse(p_message);
-                }
+                // Parse JSON header: use subarray (zero-copy) and parse once
+                const jsonPart = nullIndex !== -1 
+                    ? p_message.subarray(0, nullIndex) 
+                    : p_message;
+                v_jmsg = JSON.parse(jsonPart.toString('utf8'));
 
                 // INJECT permission with each gcs message. That is the only way to make sure that gcs can you fake it.
                 // reconstruct the binary packet
                 v_jmsg.p = p_ws.m_loginRequest.m_prm;
                 const v_jmsg_str = JSON.stringify(v_jmsg);
                 const v_jmsgBuffer = Buffer.from(v_jmsg_str, 'utf8');
-                p_message_w_permission = Buffer.concat([v_jmsgBuffer, p_message.slice(nullIndex)]);
+                p_message_w_permission = nullIndex !== -1
+                    ? Buffer.concat([v_jmsgBuffer, p_message.subarray(nullIndex)])
+                    : v_jmsgBuffer;
 
             }
             catch {
