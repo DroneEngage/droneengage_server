@@ -7,6 +7,11 @@
 
 "use strict";
 
+const dgram = require('dgram');
+
+const PROXY_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const REAPER_INTERVAL_MS = 60 * 1000; // Check every 1 minute
+
 class udp_socket {
     constructor(host, port, func, parent) {
         this._isReady = false;
@@ -118,8 +123,8 @@ class udp_proxy {
         host2 = host2 || "0.0.0.0";
         port2 = port2 || 0;
 
-        this._udp_socket1 = new udp_socket(host1, port1, this.udp2_onreceive.bind(this), this);
-        this._udp_socket2 = new udp_socket(host2, port2, this.udp1_onreceive.bind(this), this);
+        this._udp_socket1 = new udp_socket(host1, port1, this.onSocket1Receive.bind(this), this);
+        this._udp_socket2 = new udp_socket(host2, port2, this.onSocket2Receive.bind(this), this);
     }
 
     _onReady(Me, status) {
@@ -160,16 +165,56 @@ class udp_proxy {
         return this._udp_socket1.isReady() && this._udp_socket2.isReady();
     }
 
-    udp1_onreceive(message, Me) {
-        Me._udp_socket1.sendMessage(message);
+    onSocket1Receive(message, Me) {
+        Me._udp_socket2.sendMessage(message);
     }
 
-    udp2_onreceive(message, Me) {
-        Me._udp_socket2.sendMessage(message);
+    onSocket2Receive(message, Me) {
+        Me._udp_socket1.sendMessage(message);
     }
 }
 
 const m_activeUdpProxy = {};
+let m_reaperInterval = null;
+
+function startReaper() {
+    if (m_reaperInterval) return;
+    
+    m_reaperInterval = setInterval(() => {
+        const now = Date.now();
+        const names = Object.keys(m_activeUdpProxy);
+        
+        for (const name of names) {
+            const entry = m_activeUdpProxy[name];
+            if (!entry || !entry.m_udpproxy) continue;
+            
+            const lastAccess = Math.max(
+                entry.last_access || 0,
+                entry.m_udpproxy._udp_socket1?.getLastAccessTime() || 0,
+                entry.m_udpproxy._udp_socket2?.getLastAccessTime() || 0
+            );
+            
+            if (now - lastAccess > PROXY_IDLE_TIMEOUT_MS) {
+                console.log(`Reaper: Closing idle UDP proxy '${name}' (idle for ${Math.round((now - lastAccess) / 1000)}s)`);
+                entry.m_udpproxy.close();
+                delete m_activeUdpProxy[name];
+            }
+        }
+        
+        if (Object.keys(m_activeUdpProxy).length === 0) {
+            stopReaper();
+        }
+    }, REAPER_INTERVAL_MS);
+    
+    m_reaperInterval.unref();
+}
+
+function stopReaper() {
+    if (m_reaperInterval) {
+        clearInterval(m_reaperInterval);
+        m_reaperInterval = null;
+    }
+}
 
 function closeUDPSocket(name, callback) {
     let ms = {};
@@ -200,6 +245,7 @@ function getUDPSocket(name, socket1, socket2, callback) {
         obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port, "0.0.0.0", socket2.port, (enabled) => {
             const ms = obj.m_udpproxy.getConfig();
             ms.en = enabled;
+            startReaper();
             callback(ms);
         });
     } else {
