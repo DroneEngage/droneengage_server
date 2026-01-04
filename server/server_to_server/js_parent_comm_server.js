@@ -29,7 +29,7 @@ class ParentCommServer {
   restart() {
     if (this.wss) {
       this.wss.close(() => {
-        console.log(`Super Server closed on ${this.m_host}:${this.m_port}`);
+        console.log('Super Server closed on ' + global.Colors.BSuccess + this.m_host + ':' + this.m_port + global.Colors.Reset);
         this._startServer(this.m_port, this.m_host);
       });
     } else {
