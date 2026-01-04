@@ -22,6 +22,12 @@ const udp = require('../js_udp_proxy.js');
 
 let v_andruavTasks;
 
+// Server ID for origin tracking in mesh relay (prevents message loops)
+// Uses configured server_id from global config
+function getServerOriginID() {
+    return global.m_serverconfig?.m_configuration?.server_id || 'unknown';
+}
+
 
 function getHeaderParams(url) {
     let regex = /[?&]([^=#]+)=([^&#]*)/g,
@@ -96,20 +102,61 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
 
     function forwardMessage(message, p_isBinary, p_ws)
     {
+        if (p_ws == null || p_ws.m_loginRequest == null) {
+            return;
+        }
+
         const attached_data = {
             'g': p_ws.m__group,
             's': p_ws.m_loginRequest.m_senderID,
             'b': p_isBinary
         };
 
+        // IMPORTANT: Inject _origin server ID to prevent loops in mesh relay.
+        // NOTE: This parsing is intentionally separate from fn_parseMessage() parsing.
+        // DO NOT optimize by moving _origin injection to fn_parseMessage() because:
+        // 1. _origin should ONLY be added to relay-forwarded messages, NOT local client messages
+        // 2. Binary message format is: JSON + char(0) + binary_payload
+        //    The binary payload must be preserved when reconstructing the message.
+        // See wiki/MessagePropagation.md for architecture details.
+        let forwardMsg = message;
+        try {
+            if (p_isBinary) {
+                // Binary: parse JSON part only (before null terminator), preserve binary payload
+                const nullIndex = message.indexOf(0);
+                const jsonPart = nullIndex !== -1 ? message.subarray(0, nullIndex) : message;
+                const v_jmsg = JSON.parse(jsonPart.toString('utf8'));
+                
+                // Only inject origin if not already set (first hop)
+                if (!v_jmsg._origin) {
+                    v_jmsg._origin = getServerOriginID();
+                    const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
+                    // Reconstruct: new_json + original_null_and_binary
+                    forwardMsg = nullIndex !== -1
+                        ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
+                        : newJsonBuffer;
+                }
+            } else {
+                // Text: simple JSON parse/modify/stringify
+                const v_jmsg = JSON.parse(message);
+                if (!v_jmsg._origin) {
+                    v_jmsg._origin = getServerOriginID();
+                    forwardMsg = JSON.stringify(v_jmsg);
+                }
+            }
+        } catch (e) {
+            // If parsing fails, forward original message
+            console.log("Failed to parse message for origin tracking:", e.message);
+        }
+
         if (global.m_serverconfig.m_configuration.enable_super_server === true)
         {
-            global.m_andruav_channel_parent_server.getInstance().forwardMessage(message, p_isBinary, attached_data);
+            global.m_andruav_channel_parent_server.getInstance().forwardMessage(forwardMsg, p_isBinary, attached_data);
         }
                     
         if (global.m_serverconfig.m_configuration.enable_persistant_relay === true)
         {
-            global.m_andruav_channel_child_socket.getInstance().forwardMessage(message, p_isBinary, attached_data);
+            global.m_andruav_channel_child_socket.getInstance().forwardMessage(forwardMsg, p_isBinary, attached_data);
         }
     }
 
@@ -210,16 +257,8 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
         let senderID = null;
         if (p_isBinary == true) {
             try {
-                
-                if (nullIndex !== -1) {
-                    const c_buff = p_message.slice(0, nullIndex);
-                    v_jmsg = JSON.parse(c_buff.toString('utf8'));
-                }
-
-                if (v_jmsg == null) {
-                    // bug fix: sometimes text message is sent as binary although it has no binary extension.
-                    v_jmsg = JSON.parse(p_message);
-                }
+                const jsonPart = nullIndex !== -1 ? p_message.subarray(0, nullIndex) : p_message;
+                v_jmsg = JSON.parse(jsonPart.toString('utf8'));
                 senderID = v_jmsg.sd;
             }
             catch {
@@ -227,18 +266,18 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             }
         }
         else {
-            
-            // This condition hides an error when ws is closed silently.
-            // a new instance of ws is created with group = 0 and the  old ws is lost
-            // do not log statistics for now.
             try {
                 v_jmsg = JSON.parse(p_message);
                 senderID = v_jmsg.sd;
-                //p_message_w_permission = p_message
             }
             catch {
                 return;
             }
+        }
+
+        // Loop prevention: ignore messages that originated from this server
+        if (v_jmsg._origin === getServerOriginID()) {
+            return;
         }
 
         //p_message = null;
@@ -284,25 +323,17 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                         }
                         break;
                     }
-                    else
-                        // 2- Agent  & (v_jmsg['tg'] == null)
-                        if (p_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_DRONE) {
-                            // Default broadcast for agents is to GCS only
-                            c_ChatAccountRooms.fn_sendToAllGCS(p_message, p_isBinary, senderID);
-                            break;
-                        }
-                        else
-                            // 3- GCS Logic  & (v_jmsg['tg'] == null)
-                            if (p_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_GCS) {
-                                // Default broadcast for GCS is to all units.
-                                c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
-                                break;
-                            }
+                    else {
+                        // No target specified in external message - broadcast to all local units.
+                        // External messages don't have socket context, so we can't determine actor type.
+                        // Safe default: send to all units and let them filter.
+                        c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                    }
                 }
                 catch (e) {
                     p_message = Buffer.alloc(0);
                     c_dumpError.fn_dumperror(e);
-                    if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL', 'fn_parseMessage', null, e);
+                    if (global.m_logger) global.m_logger.Error('Bad Parsing Message:CONST_WS_MSG_ROUTING_INDIVIDUAL', 'fn_parseExternalMessage', null, e);
                 }
                 break;
         }
