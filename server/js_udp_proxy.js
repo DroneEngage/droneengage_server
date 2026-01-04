@@ -8,15 +8,90 @@
 "use strict";
 
 const dgram = require('dgram');
+const fs = require('fs');
+const os = require('os');
 
 const PROXY_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const REAPER_INTERVAL_MS = 60 * 1000; // Check every 1 minute
+
+const UDP_RECV_BUFFER_SIZE = 4 * 1024 * 1024; // 4 MB receive buffer
+const UDP_SEND_BUFFER_SIZE = 4 * 1024 * 1024; // 4 MB send buffer
+
+/**
+ * Checks and attempts to fix Linux kernel UDP buffer size limits.
+ * 
+ * On Linux, socket buffer sizes are clamped by kernel parameters:
+ *   - /proc/sys/net/core/rmem_max (receive buffer max)
+ *   - /proc/sys/net/core/wmem_max (send buffer max)
+ * 
+ * If these limits are below UDP_RECV_BUFFER_SIZE / UDP_SEND_BUFFER_SIZE,
+ * the function attempts to update them (requires root privileges).
+ * If update fails, it logs instructions for manual configuration.
+ * 
+ * Called from server.js after initialization to ensure global.Colors is available.
+ * Non-Linux platforms are silently skipped.
+ */
+function checkAndFixKernelBuffers() {
+    if (os.platform() !== 'linux') return;
+
+    const RMEM_MAX_PATH = '/proc/sys/net/core/rmem_max';
+    const WMEM_MAX_PATH = '/proc/sys/net/core/wmem_max';
+
+    try {
+        const rmemMax = parseInt(fs.readFileSync(RMEM_MAX_PATH, 'utf8').trim(), 10);
+        const wmemMax = parseInt(fs.readFileSync(WMEM_MAX_PATH, 'utf8').trim(), 10);
+
+        const issues = [];
+        if (rmemMax < UDP_RECV_BUFFER_SIZE) {
+            issues.push({ param: 'rmem_max', current: rmemMax, required: UDP_RECV_BUFFER_SIZE, path: RMEM_MAX_PATH });
+        }
+        if (wmemMax < UDP_SEND_BUFFER_SIZE) {
+            issues.push({ param: 'wmem_max', current: wmemMax, required: UDP_SEND_BUFFER_SIZE, path: WMEM_MAX_PATH });
+        }
+
+        if (issues.length === 0) {
+            console.log('UDP buffers ' + global.Colors.BSuccess + 'OK' + global.Colors.Reset + ': rmem_max=' + global.Colors.BSuccess + rmemMax + global.Colors.Reset + ', wmem_max=' + global.Colors.BSuccess + wmemMax + global.Colors.Reset);
+            return;
+        }
+
+        console.log('==================================');
+        console.log(global.Colors.FgYellow + 'UDP BUFFER WARNING' + global.Colors.Reset + ': Kernel limits are below requested socket buffer sizes.');
+        console.log('Socket buffers will be clamped, potentially causing packet drops under load.');
+        console.log('----------------------------------');
+
+        for (const issue of issues) {
+            console.log('   ' + issue.param + ': current=' + global.Colors.Error + issue.current + global.Colors.Reset + ', required=' + global.Colors.BSuccess + issue.required + global.Colors.Reset);
+
+            try {
+                fs.writeFileSync(issue.path, String(issue.required));
+                console.log('   ' + global.Colors.BSuccess + 'Updated ' + issue.param + ' to ' + issue.required + global.Colors.Reset);
+            } catch (writeErr) {
+                if (writeErr.code === 'EACCES' || writeErr.code === 'EPERM') {
+                    console.log('   ' + global.Colors.Error + 'Cannot update ' + issue.param + ' (requires root privileges)' + global.Colors.Reset);
+                } else {
+                    console.log('   ' + global.Colors.Error + 'Failed to update ' + issue.param + ': ' + writeErr.message + global.Colors.Reset);
+                }
+            }
+        }
+
+        console.log('----------------------------------');
+        console.log('To fix permanently, run as root:');
+        console.log(global.Colors.Bright + '   echo ' + UDP_RECV_BUFFER_SIZE + ' > ' + RMEM_MAX_PATH + global.Colors.Reset);
+        console.log(global.Colors.Bright + '   echo ' + UDP_SEND_BUFFER_SIZE + ' > ' + WMEM_MAX_PATH + global.Colors.Reset);
+        console.log('Or add to /etc/sysctl.conf:');
+        console.log(global.Colors.Bright + '   net.core.rmem_max = ' + UDP_RECV_BUFFER_SIZE + global.Colors.Reset);
+        console.log(global.Colors.Bright + '   net.core.wmem_max = ' + UDP_SEND_BUFFER_SIZE + global.Colors.Reset);
+        console.log('==================================');
+
+    } catch (err) {
+        console.log(global.Colors.Error + 'UDP buffer check failed: ' + err.message + global.Colors.Reset);
+    }
+}
 
 class udp_socket {
     constructor(host, port, func, parent) {
         this._isReady = false;
         this.parent = parent;
-        this.dgram = require('dgram');
         this._ready_counter = 0;
         this._caller_port = null;
         this._caller_ip = null;
@@ -25,7 +100,11 @@ class udp_socket {
         this._port = port;
         this._onMessageReceived = func;
         this._last_access_time = 0;
-        this._server = this.dgram.createSocket('udp4');
+        this._server = dgram.createSocket({
+            type: 'udp4',
+            recvBufferSize: UDP_RECV_BUFFER_SIZE,
+            sendBufferSize: UDP_SEND_BUFFER_SIZE
+        });
 
         this._server.on('listening', () => {
             this._port = this._server.address().port;
@@ -89,7 +168,7 @@ class udp_socket {
 
     sendMessage(message) {
         if (this._caller_port === null || this._server === null) return;
-        this._server.send(message, 0, message.length, this._caller_port, this._caller_ip);
+        this._server.send(message, this._caller_port, this._caller_ip);
     }
 
     getConfig() {
@@ -270,5 +349,6 @@ module.exports = {
     udp_socket,
     udp_proxy,
     getUDPSocket,
-    closeUDPSocket
+    closeUDPSocket,
+    checkAndFixKernelBuffers
 };
