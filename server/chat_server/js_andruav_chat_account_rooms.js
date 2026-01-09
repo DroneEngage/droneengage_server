@@ -8,6 +8,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 const _dumpError = require("../../dumperror.js");
+const c_activeSenders = require("./js_andruav_active_senders.js");
 
 
 const c_accounts = {};
@@ -66,12 +67,18 @@ function fn_sendToAll (message, isBinary, senderId) {
     }
 }
 
-function fn_sendTIndividualId (message, isBinary, senderId, cb) {
-    for (const accountId in c_accounts) {
-        const account = c_accounts[accountId];
-        for (const groupId in account.m_groups) {
-            account.m_groups[groupId].fn_sendToIndividual(message, isBinary, senderId, cb);
+function fn_sendTIndividualId (message, isBinary, targetId, cb) {
+    // O(1) lookup using active senders map instead of O(n²) nested loops
+    const socket = c_activeSenders.getActiveSender(targetId);
+    if (socket && socket.readyState === 1) { // 1 = WebSocket.OPEN
+        try {
+            socket.send(message, { binary: isBinary });
+        } catch (e) {
+            _dumpError.fn_dumperror(e);
+            cb && cb(targetId);
         }
+    } else {
+        cb && cb(targetId);
     }
 }
 
@@ -271,14 +278,16 @@ Group.prototype.fn_broadcast = function (p_message, p_isbinary, senderID, p_acto
     // I am using c_ws.m_loginRequest.m_senderID instead of p_message.sd 
     // to prevent sender socket from deceiving the server as m_senderID is recieved from AUTH Server.
     
-    for (const [_, socket] of Object.entries(this.m_units)) {
+    // Using for...in instead of Object.entries() to avoid array allocation in hot path
+    for (const unitName in this.m_units) {
+        const socket = this.m_units[unitName];
         try {
             if (socket.m_loginRequest.m_senderID !== senderID &&
                 (p_actorType === null || socket.m_loginRequest.m_actorType === p_actorType)) {
                 socket.send(p_message, { binary: p_isbinary });
             }
         } catch (e) {
-            console.log(`broadcast :ws:${socket.Name} Orphan socket Error: ${e}`);
+            console.log(`broadcast :ws:${socket.name} Orphan socket Error: ${e}`);
             _dumpError.fn_dumperror(e);
             this.fn_handleOrphanSocket(socket);
         }

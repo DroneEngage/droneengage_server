@@ -283,9 +283,8 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
         //p_message = null;
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING]) {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
-                c_ChatAccountRooms.fn_sendToAllGCS(p_message, p_isBinary, senderID);
-                c_ChatAccountRooms.fn_sendToAllAgent(p_message, p_isBinary, senderID);
-                
+                // Single iteration instead of two separate calls
+                c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
              break;
 
              case c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL: // individual

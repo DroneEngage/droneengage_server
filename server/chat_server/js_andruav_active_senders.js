@@ -18,9 +18,19 @@ function deleteActiveSenderIDList(senderID)
     delete m_activeSenderIDsList[senderID];
 }
 
+/**
+ * O(1) lookup for a socket by senderID.
+ * @param {string} senderID 
+ * @returns {WebSocket|null}
+ */
+function getActiveSender(senderID)
+{
+    return m_activeSenderIDsList[senderID] || null;
+}
 
 
 module.exports = {
     addActiveSenderIDList,
-    deleteActiveSenderIDList
+    deleteActiveSenderIDList,
+    getActiveSender
 };
