@@ -314,7 +314,7 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                                 break;
                             default:
                                 // ONE to ONE Message
-                                c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, function onNotFound()
+                                c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, senderID, function onNotFound()
                                 {
                                     // TODO: DONT PROPAGATE MORE
                                 });

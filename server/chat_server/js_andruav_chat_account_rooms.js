@@ -67,14 +67,15 @@ function fn_sendToAll (message, isBinary, senderId) {
     }
 }
 
-function fn_sendTIndividualId (message, isBinary, targetId, cb) {
-    // O(1) lookup using active senders map instead of O(n²) nested loops
+
+function fn_sendTIndividualId (message, isBinary, targetId, senderId, cb) {
     const socket = c_activeSenders.getActiveSender(targetId);
-    if (socket && socket.readyState === 1) { // 1 = WebSocket.OPEN
-        try {
+    if (socket && socket.readyState === 1) {
+        // Validate sender is in same group as target
+        const senderSocket = c_activeSenders.getActiveSender(senderId);
+        if (senderSocket?.m__group === socket.m__group) {
             socket.send(message, { binary: isBinary });
-        } catch (e) {
-            _dumpError.fn_dumperror(e);
+        } else {
             cb && cb(targetId);
         }
     } else {
