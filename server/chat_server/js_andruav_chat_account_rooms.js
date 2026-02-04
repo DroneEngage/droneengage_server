@@ -126,6 +126,10 @@ function fn_del_member_fromGroup(p_websocket) {
 
 function fn_del_member_fromAccountByName(p_loginRequest, terminateSocket) {
 
+    if ((p_loginRequest == null) || (p_loginRequest.m_accountID == null) || (p_loginRequest.m_senderID == null)) {
+        return;
+    }
+
     let acc = c_accounts[p_loginRequest.m_accountID];
 
     if (acc == null) {
