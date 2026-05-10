@@ -154,7 +154,7 @@ function fn_initSingletons()
 function fn_startServer ()
 {
     // checking memory
-    setInterval(checkMemory, 10000);
+    setInterval(checkMemory, 60000);
 
     // parse input arguments
     fn_parseArgs();
