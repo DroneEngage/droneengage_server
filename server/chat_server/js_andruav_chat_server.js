@@ -161,6 +161,52 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
     }
 
 
+    /**
+     * Forwards external relay messages further in the relay tree.
+     * Enables tree-like propagation: Child A -> Parent -> Child B/C + Grandparent
+     * @param {*} message 
+     * @param {*} p_isBinary 
+     * @param {*} p_source_ws Optional WebSocket of the source child (for parent mode exclusion)
+     */
+    function forwardExternalMessage(message, p_isBinary, p_source_ws = null) {
+        // Inject _origin if not already set (for loop prevention)
+        let forwardMsg = message;
+        try {
+            if (p_isBinary) {
+                const nullIndex = message.indexOf(0);
+                const jsonPart = nullIndex !== -1 ? message.subarray(0, nullIndex) : message;
+                const v_jmsg = JSON.parse(jsonPart.toString('utf8'));
+                
+                if (!v_jmsg._origin) {
+                    v_jmsg._origin = getServerOriginID();
+                    const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
+                    forwardMsg = nullIndex !== -1
+                        ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
+                        : newJsonBuffer;
+                }
+            } else {
+                const v_jmsg = JSON.parse(message);
+                if (!v_jmsg._origin) {
+                    v_jmsg._origin = getServerOriginID();
+                    forwardMsg = JSON.stringify(v_jmsg);
+                }
+            }
+        } catch (e) {
+            console.log("Failed to parse external message for origin tracking:", e.message);
+        }
+
+        // Forward to parent (grandparent) if in child mode
+        if (global.m_serverconfig.m_configuration.enable_persistant_relay === true) {
+            global.m_andruav_channel_child_socket.getInstance().forwardMessage(forwardMsg, p_isBinary);
+        }
+
+        // Forward to children (excluding source child) if in parent mode
+        if (global.m_serverconfig.m_configuration.enable_super_server === true) {
+            global.m_andruav_channel_parent_server.getInstance().forwardMessage(forwardMsg, p_isBinary, p_source_ws);
+        }
+    }
+
+
     function _acceptConnection(c_onb, p_ws){
         const c_status = {};
         c_status.m_TTX = 0;
@@ -249,9 +295,10 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
      * Parses messages that are received by or from a super server.
      * @param {*} p_message 
      * @param {*} p_isBinary 
+     * @param {*} p_source_ws Optional WebSocket of the source child that sent this message (for parent mode exclusion)
      * @returns 
      */
-    function fn_parseExternalMessage(p_message, p_isBinary) {
+    function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
         let v_jmsg = null;
         const nullIndex = p_message.indexOf(0);
         let senderID = null;
@@ -285,6 +332,8 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
                 // Single iteration instead of two separate calls
                 c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                // RELAY FORWARDING: Broadcast messages propagate in the relay tree
+                forwardExternalMessage(p_message, p_isBinary, p_source_ws);
              break;
 
              case c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL: // individual
@@ -303,20 +352,26 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_GCS:
                                 // Target is GCS regardless who the sender is means [broadcast] to all GCS.
                                 c_ChatAccountRooms.fn_sendToAllGCS(p_message, p_isBinary, senderID);
+                                // RELAY FORWARDING: Broadcast messages propagate in the relay tree
+                                forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL:
                                 // Target is _GD_  means [broadcast] to all units including GCS & drones.
                                 c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                                // RELAY FORWARDING: Broadcast messages propagate in the relay tree
+                                forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_AGENTS:
                                 // Target is _AGN_  means [broadcast] to all drones.
                                 c_ChatAccountRooms.fn_sendToAllAgent(p_message, p_isBinary, senderID);
+                                // RELAY FORWARDING: Broadcast messages propagate in the relay tree
+                                forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             default:
-                                // ONE to ONE Message
+                                // ONE to ONE Message - do NOT propagate in relay tree
                                 c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, senderID, function onNotFound()
                                 {
-                                    // TODO: DONT PROPAGATE MORE
+                                    // One-to-one messages are not propagated further
                                 });
                                 break;
                         }
@@ -327,6 +382,8 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                         // External messages don't have socket context, so we can't determine actor type.
                         // Safe default: send to all units and let them filter.
                         c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                        // RELAY FORWARDING: Broadcast messages propagate in the relay tree
+                        forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                     }
                 }
                 catch (e) {

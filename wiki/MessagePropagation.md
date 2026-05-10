@@ -64,12 +64,14 @@ fn_parseMessage()
                  └──► Child Servers (if enable_persistant_relay=true)
 ```
 
+
 **Code path:**
 1. `fn_onWsMessage()` receives WS message
 2. Calls `fn_parseMessage(p_ws, p_message, p_isBinary)`
 3. Parses JSON, injects permission (`p` field)
 4. Routes to local clients based on `ty` (routing type) and `tg` (target)
 5. Calls `forwardMessage()` to propagate to relay servers
+
 
 ### 2. External Server → Local Delivery Only
 

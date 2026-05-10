@@ -70,7 +70,7 @@ class ChildCommServer {
                 if (typeof (message) !== 'string') {
                         v_isBinary = true;
                 }
-                c_ChatServer.fn_parseExternalMessage( message, v_isBinary);
+                c_ChatServer.fn_parseExternalMessage( message, v_isBinary, this.parentWs);
       
     } catch (error) {
       console.error(`Error parsing message from parent:`, error);
