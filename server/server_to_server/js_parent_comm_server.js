@@ -74,7 +74,7 @@ class ParentCommServer {
         if (typeof (p_msg) !== 'string') {
                 v_isBinary = true;
         }
-        c_ChatServer.fn_parseExternalMessage(p_msg, v_isBinary);
+        c_ChatServer.fn_parseExternalMessage(p_msg, v_isBinary, child_ws);
       } catch (error) {
         console.error(`Error parsing message from parent:`, error);
       }
@@ -95,10 +95,14 @@ class ParentCommServer {
   }
 
 
-  // forward message to all clients
-  forwardMessage(message, p_isBinary) {
+  // forward message to all clients, optionally excluding a specific child
+  forwardMessage(message, p_isBinary, exclude_ws = null) {
     for (const { child_ws } of this.clientData.values()) {
       if (child_ws && child_ws.readyState === WebSocket.OPEN) {
+        // Skip the excluded child (sender) to prevent sending message back
+        if (exclude_ws && child_ws === exclude_ws) {
+          continue;
+        }
         child_ws.send(message, { binary: p_isBinary });
       }
     }
