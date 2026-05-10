@@ -39,6 +39,7 @@ This document describes the message routing and propagation logic in the server-
 | `fn_parseMessage()` | chat_server | Handles messages from **local** WebSocket clients |
 | `fn_parseExternalMessage()` | chat_server | Handles messages from **relay** servers |
 | `forwardMessage()` | chat_server | Forwards messages to parent/child relay servers |
+| `forwardExternalMessage()` | chat_server | Re-forwards broadcast relay messages through the relay tree |
 | `getServerOriginID()` | chat_server | Returns unique server ID for loop prevention |
 
 ---
@@ -73,7 +74,7 @@ fn_parseMessage()
 5. Calls `forwardMessage()` to propagate to relay servers
 
 
-### 2. External Server → Local Delivery Only
+### 2. External Server → Local Delivery and Relay Propagation
 
 When a message arrives from a relay server (parent or child):
 
@@ -83,17 +84,22 @@ Relay Server
        ▼
 fn_parseExternalMessage()
        │
-       └──► Local delivery ONLY (fn_sendToAll*, fn_sendToIndividual)
-       
-       ✗ NO re-forwarding to other servers
+       ├──► Local delivery (fn_sendToAll*, fn_sendToIndividual)
+       │
+       └──► forwardExternalMessage() for broadcast-style messages
+                 │
+                 ├──► Parent Server (if enable_persistant_relay=true)
+                 │
+                 └──► Child Servers except source child (if enable_super_server=true)
 ```
 
 **Code path:**
 1. `ParentCommServer.on('message')` or `ChildCommServer.onReceive()`
-2. Calls `fn_parseExternalMessage(p_message, p_isBinary)`
+2. Calls `fn_parseExternalMessage(p_message, p_isBinary, p_source_ws)`
 3. Checks `_origin` field for loop prevention
-4. Routes to local clients only
-5. **Does NOT call `forwardMessage()`** - prevents infinite loops
+4. Routes to local clients based on `ty` and `tg`
+5. Calls `forwardExternalMessage()` only for broadcast-style relay messages
+6. One-to-one external messages are delivered locally if the target exists and are not propagated further
 
 ---
 
@@ -111,7 +117,7 @@ function getServerOriginID() {
 
 ### Injection Point
 
-In `forwardMessage()`, the `_origin` field is injected into the message (first hop only):
+In `forwardMessage()` and `forwardExternalMessage()`, the `_origin` field is injected into the message (first hop only):
 
 ```javascript
 if (!v_jmsg._origin) {
@@ -131,7 +137,7 @@ if (v_jmsg._origin === getServerOriginID()) {
 
 ### Why This Matters
 
-When `ParentCommServer.forwardMessage()` broadcasts to **all** children, it includes the originating child. Without origin tracking:
+When `ParentCommServer.forwardMessage()` broadcasts to children, source-child exclusion is used when the message came from a child relay connection. `_origin` still protects against loops and bounce-back through parent/child relay topologies. Without loop prevention:
 
 ```
 Child A sends message → Parent → broadcasts to [A, B, C]
@@ -139,7 +145,7 @@ Child A sends message → Parent → broadcasts to [A, B, C]
                                         └─► Child A receives its own message back!
 ```
 
-With `_origin` check, Child A ignores the bounce-back.
+With `_origin` check and source-child exclusion, Child A does not process its own relayed message again.
 
 ---
 
@@ -182,5 +188,5 @@ In server config file:
 | Message Source | Handler | Local Delivery | Relay Forward | Loop Check |
 |----------------|---------|----------------|---------------|------------|
 | Local WS Client | `fn_parseMessage()` | ✅ | ✅ | Injects `_origin` |
-| Parent Server | `fn_parseExternalMessage()` | ✅ | ❌ | Checks `_origin` |
-| Child Server | `fn_parseExternalMessage()` | ✅ | ❌ | Checks `_origin` |
+| Parent Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_origin` |
+| Child Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_origin`; excludes source child when forwarding to children |
