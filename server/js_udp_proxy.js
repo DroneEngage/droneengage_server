@@ -255,17 +255,80 @@ class udp_proxy {
 
 const m_activeUdpProxy = {};
 let m_reaperInterval = null;
+let m_lastReaperTick = 0;
+
+function recreateProxy(name, entry, reason) {
+    if (!entry || !entry.m_udpproxy) return false;
+
+    const oldProxy = entry.m_udpproxy;
+    const config = oldProxy.getConfig();
+    const stickyPort1 = entry.socket1_port || config.socket1.port || 0;
+    const stickyPort2 = entry.socket2_port || config.socket2.port || 0;
+
+    try {
+        oldProxy.close();
+    } catch (err) {
+        console.error(`Reaper: Failed to close proxy '${name}' during recreate:`, err);
+    }
+
+    entry.m_udpproxy = new udp_proxy(
+        "0.0.0.0",
+        stickyPort1,
+        "0.0.0.0",
+        stickyPort2,
+        (enabled) => {
+            if (enabled) {
+                const refreshed = entry.m_udpproxy.getConfig();
+                entry.socket1_port = refreshed.socket1.port;
+                entry.socket2_port = refreshed.socket2.port;
+                console.log(`UDP proxy '${name}' recreated successfully (${reason}).`);
+            } else {
+                console.log(`UDP proxy '${name}' recreate failed (${reason}).`);
+            }
+        }
+    );
+
+    entry.last_access = Date.now();
+    return true;
+}
+
+function recoverAllProxiesAfterResume(gapMs) {
+    const names = Object.keys(m_activeUdpProxy);
+    if (names.length === 0) return;
+
+    console.log(`Reaper: Detected possible system resume (timer gap ${gapMs} ms). Recreating ${names.length} UDP proxy instance(s).`);
+
+    for (const name of names) {
+        const entry = m_activeUdpProxy[name];
+        recreateProxy(name, entry, 'resume recovery');
+    }
+}
 
 function startReaper() {
     if (m_reaperInterval) return;
+    m_lastReaperTick = Date.now();
     
     m_reaperInterval = setInterval(() => {
         const now = Date.now();
+
+        if (m_lastReaperTick > 0) {
+            const gap = now - m_lastReaperTick;
+            if (gap > (REAPER_INTERVAL_MS * 3)) {
+                recoverAllProxiesAfterResume(gap);
+            }
+        }
+
+        m_lastReaperTick = now;
         const names = Object.keys(m_activeUdpProxy);
         
         for (const name of names) {
             const entry = m_activeUdpProxy[name];
             if (!entry || !entry.m_udpproxy) continue;
+
+            if (!entry.m_udpproxy.isReady()) {
+                recreateProxy(name, entry, 'health check not ready');
+                continue;
+            }
             
             const lastAccess = Math.max(
                 entry.last_access || 0,
@@ -293,6 +356,7 @@ function stopReaper() {
         clearInterval(m_reaperInterval);
         m_reaperInterval = null;
     }
+    m_lastReaperTick = 0;
 }
 
 function closeUDPSocket(name, callback) {
@@ -317,25 +381,37 @@ function getUDPSocket(name, socket1, socket2, callback) {
         // New socket
         const obj = {
             created: Date.now(),
-            last_access: Date.now()
+            last_access: Date.now(),
+            socket1_port: socket1.port || 0,
+            socket2_port: socket2.port || 0
         };
         m_activeUdpProxy[name] = obj;
 
         obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port, "0.0.0.0", socket2.port, (enabled) => {
             const ms = obj.m_udpproxy.getConfig();
+            obj.socket1_port = ms.socket1.port;
+            obj.socket2_port = ms.socket2.port;
             ms.en = enabled;
             startReaper();
             callback(ms);
         });
     } else {
         // This unit has already a socket
-        const ms = m_activeUdpProxy[name].m_udpproxy.getConfig();
+        const entry = m_activeUdpProxy[name];
+        const ms = entry.m_udpproxy.getConfig();
 
         if ((socket1.port === 0 || ms.socket1.port === socket1.port) && (socket2.port === 0 || ms.socket2.port === socket2.port)) {
-            // Same socket same configuration.
-            ms.last_access = Date.now();
-            ms.en = true;
-            callback(ms);
+            if (!entry.m_udpproxy.isReady()) {
+                recreateProxy(name, entry, 'getUDPSocket refresh');
+                const refreshed = entry.m_udpproxy.getConfig();
+                refreshed.en = entry.m_udpproxy.isReady();
+                callback(refreshed);
+            } else {
+                // Same socket same configuration.
+                entry.last_access = Date.now();
+                ms.en = true;
+                callback(ms);
+            }
         } else {
             // Close unit old socket
             closeUDPSocket(name, () => {
