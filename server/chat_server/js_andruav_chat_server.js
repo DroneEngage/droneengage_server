@@ -106,57 +106,61 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             return;
         }
 
-        const attached_data = {
-            'g': p_ws.m__group,
-            's': p_ws.m_loginRequest.m_senderID,
-            'b': p_isBinary
-        };
+        const c_group = p_ws.m__group;
 
-        // IMPORTANT: Inject _origin server ID to prevent loops in mesh relay.
+        // IMPORTANT: Inject relay metadata in a SINGLE parse pass to avoid re-parsing downstream:
+        //  - _path : append this server to the loop-prevention trail (relay-forwarded messages only).
+        //  - _gid / _aid : the LOCAL sender's group/account, used for scoped delivery on the receiver.
         // NOTE: This parsing is intentionally separate from fn_parseMessage() parsing.
-        // DO NOT optimize by moving _origin injection to fn_parseMessage() because:
-        // 1. _origin should ONLY be added to relay-forwarded messages, NOT local client messages
+        // DO NOT move this injection to fn_parseMessage() because:
+        // 1. These fields should ONLY be added to relay-forwarded messages, NOT local client messages
         // 2. Binary message format is: JSON + char(0) + binary_payload
         //    The binary payload must be preserved when reconstructing the message.
         // See wiki/MessagePropagation.md for architecture details.
         let forwardMsg = message;
         try {
+            const v_originID = getServerOriginID();
             if (p_isBinary) {
                 // Binary: parse JSON part only (before null terminator), preserve binary payload
                 const nullIndex = message.indexOf(0);
                 const jsonPart = nullIndex !== -1 ? message.subarray(0, nullIndex) : message;
                 const v_jmsg = JSON.parse(jsonPart.toString('utf8'));
-                
-                // Only inject origin if not already set (first hop)
-                if (!v_jmsg._origin) {
-                    v_jmsg._origin = getServerOriginID();
-                    const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
-                    // Reconstruct: new_json + original_null_and_binary
-                    forwardMsg = nullIndex !== -1
-                        ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
-                        : newJsonBuffer;
+
+                if (!Array.isArray(v_jmsg._path)) v_jmsg._path = [];
+                v_jmsg._path.push(v_originID);
+                if (c_group != null) {
+                    v_jmsg._gid = c_group.m_ID;
+                    v_jmsg._aid = c_group.m_parentAccount.m_accountID;
                 }
+                const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
+                // Reconstruct: new_json + original_null_and_binary
+                forwardMsg = nullIndex !== -1
+                    ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
+                    : newJsonBuffer;
             } else {
                 // Text: simple JSON parse/modify/stringify
                 const v_jmsg = JSON.parse(message);
-                if (!v_jmsg._origin) {
-                    v_jmsg._origin = getServerOriginID();
-                    forwardMsg = JSON.stringify(v_jmsg);
+                if (!Array.isArray(v_jmsg._path)) v_jmsg._path = [];
+                v_jmsg._path.push(v_originID);
+                if (c_group != null) {
+                    v_jmsg._gid = c_group.m_ID;
+                    v_jmsg._aid = c_group.m_parentAccount.m_accountID;
                 }
+                forwardMsg = JSON.stringify(v_jmsg);
             }
         } catch (e) {
             // If parsing fails, forward original message
-            console.log("Failed to parse message for origin tracking:", e.message);
+            console.log("Failed to parse message for relay metadata:", e.message);
         }
 
         if (global.m_serverconfig.m_configuration.enable_super_server === true)
         {
-            global.m_andruav_channel_parent_server.getInstance().forwardMessage(forwardMsg, p_isBinary, attached_data);
+            global.m_andruav_channel_parent_server.getInstance().forwardMessage(forwardMsg, p_isBinary);
         }
                     
         if (global.m_serverconfig.m_configuration.enable_persistant_relay === true)
         {
-            global.m_andruav_channel_child_socket.getInstance().forwardMessage(forwardMsg, p_isBinary, attached_data);
+            global.m_andruav_channel_child_socket.getInstance().forwardMessage(forwardMsg, p_isBinary);
         }
     }
 
@@ -169,30 +173,29 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
      * @param {*} p_source_ws Optional WebSocket of the source child (for parent mode exclusion)
      */
     function forwardExternalMessage(message, p_isBinary, p_source_ws = null) {
-        // Inject _origin if not already set (for loop prevention)
+        // Append this server to the _path trail (for loop prevention)
         let forwardMsg = message;
         try {
+            const v_originID = getServerOriginID();
             if (p_isBinary) {
                 const nullIndex = message.indexOf(0);
                 const jsonPart = nullIndex !== -1 ? message.subarray(0, nullIndex) : message;
                 const v_jmsg = JSON.parse(jsonPart.toString('utf8'));
-                
-                if (!v_jmsg._origin) {
-                    v_jmsg._origin = getServerOriginID();
-                    const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
-                    forwardMsg = nullIndex !== -1
-                        ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
-                        : newJsonBuffer;
-                }
+
+                if (!Array.isArray(v_jmsg._path)) v_jmsg._path = [];
+                v_jmsg._path.push(v_originID);
+                const newJsonBuffer = Buffer.from(JSON.stringify(v_jmsg), 'utf8');
+                forwardMsg = nullIndex !== -1
+                    ? Buffer.concat([newJsonBuffer, message.subarray(nullIndex)])
+                    : newJsonBuffer;
             } else {
                 const v_jmsg = JSON.parse(message);
-                if (!v_jmsg._origin) {
-                    v_jmsg._origin = getServerOriginID();
-                    forwardMsg = JSON.stringify(v_jmsg);
-                }
+                if (!Array.isArray(v_jmsg._path)) v_jmsg._path = [];
+                v_jmsg._path.push(v_originID);
+                forwardMsg = JSON.stringify(v_jmsg);
             }
         } catch (e) {
-            console.log("Failed to parse external message for origin tracking:", e.message);
+            console.log("Failed to parse external message for path tracking:", e.message);
         }
 
         // Forward to parent (grandparent) if in child mode
@@ -292,6 +295,29 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
 
     
     /**
+     * Delivers a relayed broadcast scoped to the originating account/group when the
+     * sender's account/group ids (_aid/_gid) are present in the message.
+     * Falls back to the legacy all-accounts broadcast when ids are missing or the
+     * account/group does not exist locally (backward compatibility).
+     * @param {*} p_message
+     * @param {*} p_isBinary
+     * @param {*} senderID
+     * @param {*} v_jmsg parsed message header
+     * @param {*} p_actorType 'g' (GCS), 'd' (drone), or null (all)
+     * @param {*} p_fallback legacy broadcast function (fn_sendToAll / fn_sendToAllGCS / fn_sendToAllAgent)
+     */
+    function deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, p_actorType, p_fallback) {
+        if ((v_jmsg._aid !== undefined) && (v_jmsg._gid !== undefined)) {
+            if (c_ChatAccountRooms.fn_sendToAccountGroup(p_message, p_isBinary, senderID, v_jmsg._aid, v_jmsg._gid, p_actorType) === true) {
+                return;
+            }
+        }
+
+        // Legacy fallback: ids absent or account/group not present locally.
+        p_fallback(p_message, p_isBinary, senderID);
+    }
+
+    /**
      * Parses messages that are received by or from a super server.
      * @param {*} p_message 
      * @param {*} p_isBinary 
@@ -322,16 +348,16 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
             }
         }
 
-        // Loop prevention: ignore messages that originated from this server
-        if (v_jmsg._origin === getServerOriginID()) {
+        // Loop prevention: ignore messages this server has already relayed
+        if (Array.isArray(v_jmsg._path) && v_jmsg._path.includes(getServerOriginID())) {
             return;
         }
 
         //p_message = null;
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING]) {
             case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
-                // Single iteration instead of two separate calls
-                c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                // Scoped to the originating account/group (falls back to all on legacy messages)
+                deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
                 // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                 forwardExternalMessage(p_message, p_isBinary, p_source_ws);
              break;
@@ -351,25 +377,25 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                         switch (v_jmsg['tg']) {
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_GCS:
                                 // Target is GCS regardless who the sender is means [broadcast] to all GCS.
-                                c_ChatAccountRooms.fn_sendToAllGCS(p_message, p_isBinary, senderID);
+                                deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'g', c_ChatAccountRooms.fn_sendToAllGCS);
                                 // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                                 forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL:
                                 // Target is _GD_  means [broadcast] to all units including GCS & drones.
-                                c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                                deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
                                 // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                                 forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             case c_CONSTANTS.CONST_WS_SENDER_ALL_AGENTS:
                                 // Target is _AGN_  means [broadcast] to all drones.
-                                c_ChatAccountRooms.fn_sendToAllAgent(p_message, p_isBinary, senderID);
+                                deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'd', c_ChatAccountRooms.fn_sendToAllAgent);
                                 // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                                 forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                                 break;
                             default:
                                 // ONE to ONE Message - do NOT propagate in relay tree
-                                c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, senderID, function onNotFound()
+                                c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, senderID, v_jmsg._gid, function onNotFound()
                                 {
                                     // One-to-one messages are not propagated further
                                 });
@@ -378,10 +404,10 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
                         break;
                     }
                     else {
-                        // No target specified in external message - broadcast to all local units.
+                        // No target specified in external message - broadcast to the originating account/group.
                         // External messages don't have socket context, so we can't determine actor type.
-                        // Safe default: send to all units and let them filter.
-                        c_ChatAccountRooms.fn_sendToAll(p_message, p_isBinary, senderID);
+                        // Safe default: send to all units in scope and let them filter.
+                        deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
                         // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                         forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                     }

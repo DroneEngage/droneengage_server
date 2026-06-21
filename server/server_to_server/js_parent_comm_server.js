@@ -95,7 +95,9 @@ class ParentCommServer {
   }
 
 
-  // forward message to all clients, optionally excluding a specific child
+  // forward message to all clients, optionally excluding a specific child.
+  // Relay metadata (_path/_gid/_aid) is injected once upstream in chat_server.forwardMessage,
+  // so no parsing is needed here.
   forwardMessage(message, p_isBinary, exclude_ws = null) {
     for (const { child_ws } of this.clientData.values()) {
       if (child_ws && child_ws.readyState === WebSocket.OPEN) {

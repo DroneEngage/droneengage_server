@@ -68,13 +68,49 @@ function fn_sendToAll (message, isBinary, senderId) {
 }
 
 
-function fn_sendTIndividualId (message, isBinary, targetId, senderId, cb) {
+/**
+ * Sends a broadcast scoped to a single ACCOUNT/GROUP, preserving account/group isolation
+ * for relayed (super-server) messages. actorType: 'g' (GCS), 'd' (drone), or null (all).
+ * Returns true if the target account/group exists locally and delivery was attempted.
+ * @param {*} message
+ * @param {*} isBinary
+ * @param {*} senderId
+ * @param {*} accountId
+ * @param {*} groupId
+ * @param {*} actorType
+ */
+function fn_sendToAccountGroup(message, isBinary, senderId, accountId, groupId, actorType) {
+    const account = c_accounts[accountId];
+    if (account == null) return false;
+    const group = account.m_groups[groupId];
+    if (group == null) return false;
+
+    if (actorType === 'g') {
+        group.fn_broadcastToGCS(message, isBinary, senderId);
+    } else if (actorType === 'd') {
+        group.fn_broadcastToDrone(message, isBinary, senderId);
+    } else {
+        group.fn_broadcast(message, isBinary, senderId);
+    }
+
+    return true;
+}
+
+
+function fn_sendTIndividualId (message, isBinary, targetId, senderId, groupID, cb) {
     const socket = c_activeSenders.getActiveSender(targetId);
     if (socket && socket.readyState === 1) {
         // Validate sender is in same group as target
         const senderSocket = c_activeSenders.getActiveSender(senderId);
         if (senderSocket?.m__group === socket.m__group) {
             socket.send(message, { binary: isBinary });
+        } else if (senderSocket === null && groupID !== undefined) {
+            // Message from super server - validate using injected groupID
+            if (socket.m__group && socket.m__group.m_ID === groupID) {
+                socket.send(message, { binary: isBinary });
+            } else {
+                cb && cb(targetId);
+            }
         } else {
             cb && cb(targetId);
         }
@@ -323,5 +359,6 @@ module.exports = {
     fn_sendToAllGCS,
     fn_sendToAllAgent,
     fn_sendToAll,
+    fn_sendToAccountGroup,
     fn_sendTIndividualId
 };

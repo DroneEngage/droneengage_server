@@ -11,7 +11,6 @@ class ChildCommServer {
     this.m_parentHost = parentHost;
     this.m_parentPort = parentPort;
     this.parentWs = null;
-    this.units = new Set();
     ChildCommServer.instance = this;
     this.connectToParent(); // Connect immediately
   }
@@ -77,15 +76,8 @@ class ChildCommServer {
     }
   }
 
-  sendMessage(senderId, recipientId, content, trace = []) {
-    if (this.parentWs) {
-      this.parentWs.send(JSON.stringify({ type: 'message', senderId, recipientId, content, trace }));
-    } else {
-      console.error(`Parent server not connected.`);
-    }
-  }
-
-
+  // Relay metadata (_path/_gid/_aid) is injected once upstream in chat_server.forwardMessage,
+  // so no parsing is needed here.
   forwardMessage(message, p_isBinary) {
     if (this.parentWs && this.parentWs.readyState === WebSocket.OPEN) {
       this.parentWs.send(message, { binary: p_isBinary });
