@@ -96,7 +96,7 @@ fn_parseExternalMessage()
 **Code path:**
 1. `ParentCommServer.on('message')` or `ChildCommServer.onReceive()`
 2. Calls `fn_parseExternalMessage(p_message, p_isBinary, p_source_ws)`
-3. Checks `_origin` field for loop prevention
+3. Checks `_path` trail for loop prevention
 4. Routes to local clients based on `ty` and `tg`
 5. Calls `forwardExternalMessage()` only for broadcast-style relay messages
 6. One-to-one external messages are delivered locally if the target exists and are not propagated further
@@ -105,7 +105,7 @@ fn_parseExternalMessage()
 
 ## Loop Prevention Mechanism
 
-### Origin Tracking
+### Path Tracking
 
 Each server has a unique `server_id` defined in config:
 
@@ -117,35 +117,76 @@ function getServerOriginID() {
 
 ### Injection Point
 
-In `forwardMessage()` and `forwardExternalMessage()`, the `_origin` field is injected into the message (first hop only):
+In `forwardMessage()` and `forwardExternalMessage()`, every server appends its own ID to the `_path` trail before relaying (on EACH hop, not just the first):
 
 ```javascript
-if (!v_jmsg._origin) {
-    v_jmsg._origin = getServerOriginID();
-}
+if (!Array.isArray(v_jmsg._path)) v_jmsg._path = [];
+v_jmsg._path.push(getServerOriginID());
 ```
 
 ### Check Point
 
-In `fn_parseExternalMessage()`, messages originating from this server are dropped:
+In `fn_parseExternalMessage()`, messages this server has already relayed are dropped:
 
 ```javascript
-if (v_jmsg._origin === getServerOriginID()) {
-    return;  // Ignore - this message came from us
+if (Array.isArray(v_jmsg._path) && v_jmsg._path.includes(getServerOriginID())) {
+    return;  // Ignore - this server is already in the relay path
 }
 ```
 
 ### Why This Matters
 
-When `ParentCommServer.forwardMessage()` broadcasts to children, source-child exclusion is used when the message came from a child relay connection. `_origin` still protects against loops and bounce-back through parent/child relay topologies. Without loop prevention:
+A single first-hop origin tag is not enough for multi-child or multi-level trees: an intermediate node does not recognize traffic it already forwarded, so a child re-forwarding a parent broadcast back up causes the parent to reprocess and amplify it indefinitely.
 
 ```
 Child A sends message → Parent → broadcasts to [A, B, C]
                                         │
-                                        └─► Child A receives its own message back!
+                                        └─► B re-forwards up → Parent reprocesses → loop!
 ```
 
-With `_origin` check and source-child exclusion, Child A does not process its own relayed message again.
+Because every relay hop appends its `server_id` to `_path`, any server that sees its own ID in the trail drops the message. Combined with source-child exclusion (`exclude_ws`), this prevents both bounce-back and multi-level loops.
+
+---
+
+## Account/Group Propagation
+
+### Purpose
+
+When messages are forwarded through the relay tree, the sender's WebSocket context is lost on the receiving server. To preserve account/group isolation, the sender's account ID (`_aid`) and group ID (`_gid`) are injected into the message during forwarding. Both are required because group IDs are not unique across accounts (`c_accounts[accountId].m_groups[groupId]`).
+
+### Injection Point
+
+All relay metadata (`_path`, `_gid`, `_aid`) is injected in a **single parse pass** inside `forwardMessage()` in `js_andruav_chat_server.js`, using the local sender's socket group. The relay transports (`js_parent_comm_server.js` / `js_child_comm_server.js`) then forward the buffer as-is without re-parsing:
+
+```javascript
+const c_group = p_ws.m__group;
+// ... append _path ...
+if (c_group != null) {
+    v_jmsg._gid = c_group.m_ID;
+    v_jmsg._aid = c_group.m_parentAccount.m_accountID;
+}
+```
+
+### Validation Point
+
+In `fn_sendTIndividualId()` in `js_andruav_chat_account_rooms.js`, when a message arrives from a super server (senderSocket is null), the injected groupID is used for validation:
+
+```javascript
+if (senderSocket === null && groupID !== undefined) {
+    // Message from super server - validate using injected groupID
+    if (socket.m__group && socket.m__group.m_ID === groupID) {
+        socket.send(message, { binary: isBinary });
+    }
+}
+```
+
+### Why This Matters
+
+Without groupID propagation, messages from super servers would fail group validation because the sender's WebSocket is not tracked in the local `c_activeSenders`. The injected `_gid` allows the receiving server to verify that the target is in the same group as the original sender.
+
+### Scoped Broadcasts
+
+Relayed broadcasts (`fn_parseExternalMessage`) are delivered through `deliverExternalBroadcast()`, which resolves `c_accounts[_aid].m_groups[_gid]` via `fn_sendToAccountGroup()` and only broadcasts within that account/group. If `_aid`/`_gid` are missing (legacy messages) or the account/group is not present locally, it falls back to the legacy all-accounts broadcast. This prevents cross-account/cross-group leakage that the older `fn_sendToAll*` flooding caused.
 
 ---
 
@@ -187,6 +228,6 @@ In server config file:
 
 | Message Source | Handler | Local Delivery | Relay Forward | Loop Check |
 |----------------|---------|----------------|---------------|------------|
-| Local WS Client | `fn_parseMessage()` | ✅ | ✅ | Injects `_origin` |
-| Parent Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_origin` |
-| Child Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_origin`; excludes source child when forwarding to children |
+| Local WS Client | `fn_parseMessage()` | ✅ | ✅ | Appends to `_path` |
+| Parent Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_path` |
+| Child Server | `fn_parseExternalMessage()` | ✅ | Broadcast-style only | Checks `_path`; excludes source child when forwarding to children |
