@@ -9,25 +9,6 @@
       "request": "launch",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
-      "name": "Home Program",
-      "stopOnEntry": true,
-      "program": "${workspaceRoot}/server.js",
-      "args": ["--config=server.home.config"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
-      "name": "Home Vodafone",
-      "program": "${workspaceRoot}/server.js",
-      "args": ["--config=server.home.vodafone.config"]
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
       "name": "Production Program",
       "program": "${workspaceRoot}/server.js",
       "args": ["--config=server.config"]
@@ -37,18 +18,18 @@
       "request": "launch",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
-      "name": "DroneServer",
+      "name": "Super Server",
       "program": "${workspaceRoot}/server.js",
-      "args": ["--config=server.s2s.drone.config"]
+      "args": ["--config=deployment/server.s2s.super.config"]
     },
     {
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
-      "name": "Super Server",
+      "name": "Local Drone Server",
       "program": "${workspaceRoot}/server.js",
-      "args": ["--config=server.s2s.super.config"]
+      "args": ["--config=deployment/server.s2s.drone.config"]
     },
     {
       "type": "node",
@@ -65,7 +46,16 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
       "name": "Flying Socket",
-      "args": ["127.0.0.1", 9967, 5, "33234", "1234"],
+      "args": ["127.0.0.1", "9967", "5", "33234", "1234"],
+      "program": "${workspaceRoot}/test/test_connect_as_unit.js"
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--preserve-symlinks", "--preserve-symlinks-main"],
+      "name": "Slave Server Connect",
+      "args": ["127.0.0.1", "9967", "5", "drone_cairo", "mhefny"],
       "program": "${workspaceRoot}/test/test_connect_as_unit.js"
     }
   ]
