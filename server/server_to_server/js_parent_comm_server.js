@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const https = require('https');
 const fs = require('fs');
 const c_ChatServer = require("../chat_server/js_andruav_chat_server");
+const c_s2s_auth = require("../js_s2s_auth.js");
 
 class ParentCommServer {
   constructor(host, port) {
@@ -60,15 +61,54 @@ class ParentCommServer {
       this.clientData.set(clientKey, { child_ws, data: {} }); // Store ws and data
 
       console.log(`New Child Communication Server Connected from ${global.Colors.BSuccess}${clientKey}${global.Colors.Reset}`);
-      
+
+      // S2S authentication: a child server must prove ownership of the private key
+      // before any of its relayed traffic is trusted or forwarded.
+      child_ws.m_s2s_authed = false;
+      let v_authTimer = null;
+      if (c_s2s_auth.fn_isEnabled() === true) {
+        const c_nonce = c_s2s_auth.fn_generateNonce();
+        child_ws.m_s2s_nonce = c_nonce;
+        child_ws.send(c_s2s_auth.fn_buildChallenge(c_nonce));
+
+        v_authTimer = setTimeout(() => {
+          if (child_ws.m_s2s_authed !== true) {
+            console.log(`${global.Colors.Error}[ATTENTION!!] Child ${clientKey} failed S2S handshake (timeout)${global.Colors.Reset}`);
+            child_ws.terminate();
+          }
+        }, c_s2s_auth.CONST_S2S_AUTH_HANDSHAKE_TIMEOUT);
+      }
+      else {
+        child_ws.m_s2s_authed = true;
+      }
 
       child_ws.on('close', () => {
         this.clientData.delete(clientKey); // Remove client on close
+        if (v_authTimer != null) clearTimeout(v_authTimer);
         console.log(`Connection closed from ${clientKey}`);
       });
 
       child_ws.on('message', (p_msg) => {
         try {
+        // Handshake gate: a child must authenticate before its messages are relayed.
+        if (child_ws.m_s2s_authed !== true) {
+          const c_env = c_s2s_auth.fn_parseEnvelope(p_msg);
+          if ((c_env != null)
+            && (c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_RESPONSE)
+            && (c_env.id != null)
+            && (c_s2s_auth.fn_verify(child_ws.m_s2s_nonce, c_env.sig, c_env.id) === true)) {
+            child_ws.m_s2s_authed = true;
+            child_ws.m_s2s_server_id = c_env.id;
+            if (v_authTimer != null) clearTimeout(v_authTimer);
+            console.log(`${global.Colors.Success}[OK] Child ${clientKey} passed S2S handshake [${c_env.id}]${global.Colors.Reset}`);
+          }
+          else {
+            console.log(`${global.Colors.Error}[ATTENTION!!] Child ${clientKey} failed S2S handshake (bad signature or missing id)${global.Colors.Reset}`);
+            child_ws.terminate();
+          }
+          return;
+        }
+
         console.log (`SUPER SRV RX:: ${p_msg}`);
         let v_isBinary = false;
         if (typeof (p_msg) !== 'string') {
@@ -100,7 +140,7 @@ class ParentCommServer {
   // so no parsing is needed here.
   forwardMessage(message, p_isBinary, exclude_ws = null) {
     for (const { child_ws } of this.clientData.values()) {
-      if (child_ws && child_ws.readyState === WebSocket.OPEN) {
+      if (child_ws && child_ws.readyState === WebSocket.OPEN && child_ws.m_s2s_authed === true) {
         // Skip the excluded child (sender) to prevent sending message back
         if (exclude_ws && child_ws === exclude_ws) {
           continue;
