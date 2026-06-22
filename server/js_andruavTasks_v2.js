@@ -14,6 +14,7 @@
  */
 
 const mysql = require('mysql2');
+const hlp_strings = require('../helpers/hlp_strings.js');
 var v_dbPool;
 
 
@@ -35,11 +36,6 @@ exports.fn_initTasks = function () {
 	}
 }
 
-String.prototype.fn_protectedFromInjection = function () {
-	var target = this;
-	return target.replace(new RegExp("--", 'g'), " ");
-};
-
 function _getTasksSQLWhere(largerThan_SID, accountID, party_sid, groupName, sender, receiver, messageType, task, isPermanent, enabled) {
 	return fn_getTasksSQLWhere2(largerThan_SID, accountID, party_sid, groupName, sender, receiver, messageType, task, isPermanent, 1)
 }
@@ -48,49 +44,49 @@ function fn_getTasksSQLWhere2(largerThan_SID, accountID, party_sid, groupName, s
 	var sql = "";
 	var putAnd = false;
 	if ((largerThan_SID != null) && (largerThan_SID != undefined) && (typeof (largerThan_SID) == 'string')) {
-		sql = sql + " SID  > " + largerThan_SID.fn_protectedFromInjection();
+		sql = sql + " SID  > " + hlp_strings.fn_protectedFromInjection(largerThan_SID);
 		putAnd = true;
 	}
 
 	if ((accountID != null) && (accountID != undefined) && (typeof (largerThan_SID) == 'string')) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " accountID = '" + accountID.fn_protectedFromInjection() + "'";
+		sql = sql + " accountID = '" + hlp_strings.fn_protectedFromInjection(accountID) + "'";
 		putAnd = true;
 	}
 
 	if ((party_sid != null) && (party_sid != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " party_sid = '" + party_sid.fn_protectedFromInjection() + "'";
+		sql = sql + " party_sid = '" + hlp_strings.fn_protectedFromInjection(party_sid) + "'";
 		putAnd = true;
 	}
 
 	if ((groupName != null) && (groupName != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " groupName = '" + groupName.fn_protectedFromInjection() + "'";
+		sql = sql + " groupName = '" + hlp_strings.fn_protectedFromInjection(groupName) + "'";
 		putAnd = true;
 	}
 
 	if ((sender != null) && (sender != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " sender = '" + sender.fn_protectedFromInjection() + "'";
+		sql = sql + " sender = '" + hlp_strings.fn_protectedFromInjection(sender) + "'";
 		putAnd = true;
 	}
 
 	if ((receiver != null) && (receiver != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " receiver = '" + receiver.fn_protectedFromInjection() + "'";
+		sql = sql + " receiver = '" + hlp_strings.fn_protectedFromInjection(receiver) + "'";
 		putAnd = true;
 	}
 
 	if ((messageType != null) && (messageType != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " messageType = '" + messageType.toString().fn_protectedFromInjection() + "'";
+		sql = sql + " messageType = '" + hlp_strings.fn_protectedFromInjection(messageType.toString()) + "'";
 		putAnd = true;
 	}
 
 	if ((task != null) && (task != undefined)) {
 		if (putAnd) sql = sql + " AND ";
-		sql = sql + " task = '" + task.fn_protectedFromInjection() + "'";
+		sql = sql + " task = '" + hlp_strings.fn_protectedFromInjection(task) + "'";
 		putAnd = true;
 	}
 
@@ -442,35 +438,35 @@ exports.fn_add_task = function fn_add_task(params) {
 
 			if (params.hasOwnProperty("accountID")) {
 				accountID_n = "`accountID`, ";
-				accountID_v = "'" + (params.accountID.fn_protectedFromInjection()) + "',";
+				accountID_v = "'" + (hlp_strings.fn_protectedFromInjection(params.accountID)) + "',";
 			}
 
 			if (params.hasOwnProperty("party_sid")) {
 				sql_part_sid_n = "`party_sid`, ";
-				sql_part_sid_v = "'" + params.party_sid.fn_protectedFromInjection() + "',";
+				sql_part_sid_v = "'" + hlp_strings.fn_protectedFromInjection(params.party_sid) + "',";
 			}
 
 			if (params.hasOwnProperty("groupName")) {
 				groupName_n = "`groupName`, ";
-				groupName_v = params.groupName.fn_protectedFromInjection() + ",";
+				groupName_v = hlp_strings.fn_protectedFromInjection(params.groupName) + ",";
 			}
 
 
 			if (params.hasOwnProperty("sender")) {
 				sender_n = "`sender`, ";
-				sender_v = "'" + params.sender.fn_protectedFromInjection() + "',";
+				sender_v = "'" + hlp_strings.fn_protectedFromInjection(params.sender) + "',";
 			}
 
 			if (params.hasOwnProperty("receiver")) {
 				receiver_n = "`receiver`, ";
-				receiver_v = "'" + (params.receiver.fn_protectedFromInjection()) + "',";
+				receiver_v = "'" + (hlp_strings.fn_protectedFromInjection(params.receiver)) + "',";
 			}
 
-			params.messageType.toString().fn_protectedFromInjection();
-			params.task.fn_protectedFromInjection();
-			params.isPermanent.toString().fn_protectedFromInjection();
+			hlp_strings.fn_protectedFromInjection(params.messageType.toString());
+			hlp_strings.fn_protectedFromInjection(params.task);
+			hlp_strings.fn_protectedFromInjection(params.isPermanent.toString());
 
-			var sql = "INSERT INTO `task`(" + accountID_n + sql_part_sid_n + groupName_n + sender_n + receiver_n + " `messageType`, `task`, `isPermanent`) VALUES (" + accountID_v + sql_part_sid_v + groupName_v + sender_v + receiver_v + params.messageType.toString().fn_protectedFromInjection() + ",'" + params.task.fn_protectedFromInjection() + "'," + params.isPermanent.toString().fn_protectedFromInjection() + ");";
+			var sql = "INSERT INTO `task`(" + accountID_n + sql_part_sid_n + groupName_n + sender_n + receiver_n + " `messageType`, `task`, `isPermanent`) VALUES (" + accountID_v + sql_part_sid_v + groupName_v + sender_v + receiver_v + hlp_strings.fn_protectedFromInjection(params.messageType.toString()) + ",'" + hlp_strings.fn_protectedFromInjection(params.task) + "'," + hlp_strings.fn_protectedFromInjection(params.isPermanent.toString()) + ");";
 
 
 
