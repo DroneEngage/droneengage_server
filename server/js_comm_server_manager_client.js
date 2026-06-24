@@ -60,7 +60,7 @@ function fn_onMessage_Handler(data) {
                     }
                 }
                 catch (ex) {
-                    console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_private_key_file): ${ex}${global.Colors.Reset}`);
+                    console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_my_private_key): ${ex}${global.Colors.Reset}`);
                     m_ws.close();
                 }
             }

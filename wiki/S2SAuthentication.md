@@ -161,7 +161,7 @@ The signature verification failed. This usually means:
 
 ### "Unknown server_id" Error
 
-The accepting server received a server ID that is not in its `s2s_public_keys` mapping. Add the server's public key to the config.
+The accepting server received a server ID that is not in its `s2s_trusted_server_keys` mapping. Add the server's public key to the config.
 
 ### Authentication Timeout
 

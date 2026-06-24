@@ -14,7 +14,12 @@
     "email": "rcmobilestuff@gmail.com"
   },
   "scripts": {
-    "start": "node ./server.js"
+    "start": "node ./server.js",
+    "test": "node --test \"test/unit/**/*.test.js\"",
+    "test:watch": "node --test --watch \"test/unit/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18"
   },
   "bin": {
     "andruavmainserver": "server.js"
