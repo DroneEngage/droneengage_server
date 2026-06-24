@@ -240,7 +240,7 @@ exports.fn_get_tasks = function fn_get_tasks(params) {
 
 	try {
 
-		if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (params.accountID.fn_isEmail() === false)) {
+		if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (hlp_strings.fn_isEmail(params.accountID) === false)) {
 			err = 'missing accountID';
 			return;
 		}
@@ -297,7 +297,7 @@ exports.fn_del_tasks = function fn_del_tasks(params) {
 
 	try {
 
-		if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (params.accountID.fn_isEmail() === false)) {
+		if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (hlp_strings.fn_isEmail(params.accountID) === false)) {
 			err = 'missing accountID';
 			return;
 		}
@@ -350,7 +350,7 @@ exports.fn_del_tasks = function fn_del_tasks(params) {
 exports.fn_disable_tasks = function fn_disable_tasks(params) {
 	//{resultfunc,errfunc,largerThan_SID, party_sid,sender,receiver,messageType,task,isPermanent}
 
-	if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (params.accountID.fn_isEmail() === false)) {
+	if ((params.accountID == null) || (params.accountID.length == 0) || (params.accountID.CONST_ACCESSCODE_MAX_LENGTH >= 0) || (hlp_strings.fn_isEmail(params.accountID) === false)) {
 		err = 'missing accountID';
 		return;
 	}
