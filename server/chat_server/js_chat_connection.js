@@ -9,6 +9,7 @@
  */
 
 const c_CONSTANTS = require("../../js_constants.js");
+const hlp_strings = require("../../helpers/hlp_strings.js");
 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
 const c_CommServerManagerClient = require("../js_comm_server_manager_client.js");
@@ -147,7 +148,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
             * and sent back to AndruavAuth.
             */
             v_loginTempKey = p_params[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()].toString();
-            if ((v_loginTempKey.fn_isAlphanumeric() !== true) || (v_loginTempKey.length > c_PARAM_LENGTH)) {
+            if ((hlp_strings.fn_isAlphanumeric(v_loginTempKey) !== true) || (v_loginTempKey.length > c_PARAM_LENGTH)) {
                 c_WS.close();
                 if (global.m_logger) global.m_logger.Warn('Party tried to login using bad credentials', 'fn_validateKey', null, p_params);
                 return false;
@@ -185,17 +186,11 @@ function fn_onConnect_Handler(p_ws, p_req) {
     }
 
 
-    function fn_onWsMessage(p_msg) {
-        //console.log ("debug ... fn_onWsMessage code: " + p_msg);
-        let v_isBinary = false;
-        if (typeof (p_msg) !== 'string') {
-            v_isBinary = true;
-        }
+    function fn_onWsMessage(p_msg, v_isBinary) {
         c_routing.fn_parseMessage(this, p_msg, v_isBinary);
         p_msg = null;
     }
-
-
+    
     function fn_onWsClose(p_code) {
         // this function can be called during key validation.
         // also this function is called when terminated a socket when a senderID kicks out an older unit with same senderID.
