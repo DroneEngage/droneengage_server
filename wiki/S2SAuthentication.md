@@ -55,6 +55,8 @@ cp AndruavLap_private.pem /path/to/andruav_server/server/ssl/s2s_ed25519_private
 
 **For the Auth Server:**
 ```bash
+# Ensure the ssl directory exists
+mkdir -p /path/to/andruav_authenticator/ssl/
 # Copy all public keys to the auth server's ssl directory
 cp AndruavLap_public.pem /path/to/andruav_authenticator/ssl/
 cp SuperServer_public.pem /path/to/andruav_authenticator/ssl/
@@ -117,6 +119,8 @@ Restart all servers to apply the configuration changes.
 | `s2s_auth_enabled` | Enable/disable S2S authentication | Yes |
 | `s2s_my_private_key` | Path to private key PEM file | Connecting servers only |
 | `s2s_trusted_server_keys` | Object mapping server_id to public key file paths | Accepting servers only |
+| `s2s_super_server_ip` | IP address of the super server (for child/relay mode) | Child servers only |
+| `s2s_super_server_port` | Port of the super server (for child/relay mode) | Child servers only |
 
 ## Key File Locations
 
