@@ -286,9 +286,11 @@ function fn_startChatServer() {
     const c_https = require('https');
 
     // HTTPS server options
+    const v_keyPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_key_file.toString()) ? global.m_serverconfig.m_configuration.ssl_key_file.toString() : v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_key_file.toString());
+    const v_certPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_cert_file.toString()) ? global.m_serverconfig.m_configuration.ssl_cert_file.toString() : v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_cert_file.toString());
     const options = {
-        key: v_fs.readFileSync(v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_key_file.toString())),
-        cert: v_fs.readFileSync(v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_cert_file.toString()))
+        key: v_fs.readFileSync(v_keyPath),
+        cert: v_fs.readFileSync(v_certPath)
     };
 
     // Create HTTPS server with Express

@@ -47,9 +47,11 @@ class ParentCommServer {
     
     const v_path = require('path');
 
+    const v_keyPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_key_file.toString()) ? global.m_serverconfig.m_configuration.ssl_key_file.toString() : v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_key_file.toString());
+    const v_certPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_cert_file.toString()) ? global.m_serverconfig.m_configuration.ssl_cert_file.toString() : v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_cert_file.toString());
     const options = {
-      key: fs.readFileSync(v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_key_file.toString())),
-      cert: fs.readFileSync(v_path.join(__dirname, "../" + global.m_serverconfig.m_configuration.ssl_cert_file.toString()))
+      key: fs.readFileSync(v_keyPath),
+      cert: fs.readFileSync(v_certPath)
     };
 
     const server = https.createServer(options);
