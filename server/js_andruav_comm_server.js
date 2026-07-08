@@ -49,7 +49,7 @@ function fn_removeSenderID(p_senderID) {
 
 
 function fn_cancelLoginRequestBySenderID(p_requestID) {
-    if (p_senderID == null) return;
+    if (p_requestID == null) return;
 
     const c_keys = Object.keys(m_waitingAccounts);
     const c_len = c_keys.length;
