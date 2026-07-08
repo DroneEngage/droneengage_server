@@ -48,7 +48,7 @@ function fn_getTasksSQLWhere2(largerThan_SID, accountID, party_sid, groupName, s
 		putAnd = true;
 	}
 
-	if ((accountID != null) && (accountID != undefined) && (typeof (largerThan_SID) == 'string')) {
+	if ((accountID != null) && (accountID != undefined) && (typeof (accountID) == 'string')) {
 		if (putAnd) sql = sql + " AND ";
 		sql = sql + " accountID = '" + hlp_strings.fn_protectedFromInjection(accountID) + "'";
 		putAnd = true;

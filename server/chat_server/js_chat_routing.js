@@ -70,7 +70,9 @@ function send_message_toMyGroup_GCS(message, isbinary, ws) {
 
 function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
     try {
-        ws.m__group.fn_sendToIndividual(message, isbinary, target, onNotFound);
+        if (ws.m__group != null) {
+            ws.m__group.fn_sendToIndividual(message, isbinary, target, onNotFound);
+        }
     }
     catch (err) {
         c_dumpError.fn_dumperror(err);
