@@ -25,6 +25,31 @@ function fn_getUnitCount() {
     return Object.keys(c_accounts).length;
 }
 
+/**
+ * Returns unit details per account, grouped by account ID.
+ * Used by the server INFO heartbeat to report live instances.
+ * @returns {Object.<string, {unitName: string, actorType: string}[]>} accountId -> unitDetails[]
+ */
+function fn_getAccountDetails() {
+    const c_details = {};
+    for (const c_accountId in c_accounts) {
+        const c_account = c_accounts[c_accountId];
+        const c_unitDetails = [];
+        for (const c_groupId in c_account.m_groups) {
+            const c_group = c_account.m_groups[c_groupId];
+            for (const c_unitName in c_group.m_units) {
+                const c_socket = c_group.m_units[c_unitName];
+                c_unitDetails.push({
+                    unitName: c_unitName,
+                    actorType: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_actorType : 'a'
+                });
+            }
+        }
+        c_details[c_accountId] = c_unitDetails;
+    }
+    return c_details;
+}
+
 
 /**
  * Sends a message to all Ground Control Stations (GCS) in ALL ACCounts.
@@ -352,6 +377,7 @@ module.exports = {
     fn_getUnitKeys,
     fn_getUnitValues,
     fn_getUnitCount,
+    fn_getAccountDetails,
     fn_add_member_to_AccountGroup,
     fn_del_member_fromGroup,
     fn_del_member_fromAccountByName,

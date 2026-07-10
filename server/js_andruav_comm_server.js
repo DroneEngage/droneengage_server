@@ -87,7 +87,7 @@ function fn_addWaitingAccount(p_tempLoginKey, p_LoginRequest) {
     // COMMENT TO ALLOW DEBUGGING
     setTimeout(function () {
         deleteLogin(p_tempLoginKey);
-    }, CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT);
+    }, CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT).unref();
 }
 
 
@@ -211,7 +211,8 @@ function fn_updateServerWatchdog() {
             // this is why we send this message with every connection.
             // it is crucial to Auth server to know the exact unique list of keys
             // so that it can rout correctly in case of multiple communication_servers
-            'accounts': c_ChatAccountRooms.fn_getUnitKeys()
+            'accounts': c_ChatAccountRooms.fn_getUnitKeys(),
+            'accountDetails': c_ChatAccountRooms.fn_getAccountDetails()
         };
 
         // send Info Card to Andruav Auth
@@ -260,6 +261,8 @@ function fn_startServer() {
 
 module.exports = {
     fn_startServer: fn_startServer,
+    fn_addWaitingAccount: fn_addWaitingAccount,
+    fn_generateLoginRequestReply: fn_generateLoginRequestReply,
     isLoginExist: isLoginExist,
     getLogin: getLogin,
     deleteLogin: deleteLogin
