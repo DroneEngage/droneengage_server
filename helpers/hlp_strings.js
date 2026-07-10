@@ -9,6 +9,9 @@ exports.replacebyIndex = v_validation.replaceByIndex;
 exports.fn_isAlphanumeric = v_validation.isAlphanumeric;
 exports.fn_isOnlyAlphanumeric = v_validation.isOnlyAlphanumeric;
 exports.fn_isEmail = v_validation.isEmail;
+exports.fn_isValidAccountName = function (str) {
+    return v_validation.isAlphanumeric(str);
+};
 
 exports.generateRandomString = function (strLen)
 {
