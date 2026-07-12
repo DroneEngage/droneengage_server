@@ -1,0 +1,142 @@
+# DroneEngage Communication Server
+
+## Project Summary
+DroneEngage Communication Server is the real-time messaging backbone for the DroneEngage/Andruav drone management ecosystem. It handles WebSocket-based communication between drone units and Ground Control Stations (GCS), implements server-to-server mesh relay for scalable message propagation, and supports message routing with group and individual targeting using Ed25519 cryptographic authentication.
+
+## Tech Stack
+- **Runtime**: Node.js >= 18
+- **Web Framework**: Express.js
+- **Database**: MySQL2
+- **Real-time**: WebSocket (ws library)
+- **Authentication**: Ed25519 S2S authentication
+- **UDP**: udp-packet for UDP proxy functionality
+- **Utilities**: lodash, moment, uuid, randomstring, jspack
+
+## Architecture
+Three operational modes:
+1. **Standalone**: Independent server for local communication
+2. **Child Server**: Connects to parent server for message relay
+3. **Parent (Super) Server**: Accepts child connections and forwards messages
+
+Core components:
+- **WebSocket Server**: Main communication channel for units and GCS
+- **S2S Relay**: Server-to-server mesh network for message propagation
+- **UDP Proxy**: Handles UDP packet forwarding
+- **Chat System**: Message routing and room management
+
+## Key Files
+- `server.js` - Main entry point, initializes all servers
+- `server.config` - JSON configuration (supports --config override)
+- `package.json` - Dependencies and scripts
+- `server/js_andruav_comm_server.js` - Main WebSocket server
+- `server/chat_server/js_andruav_chat_server.js` - Chat system singleton
+- `server/chat_server/js_chat_routing.js` - Message routing logic
+- `server/chat_server/js_chat_connection.js` - Connection management
+- `server/chat_server/js_chat_relay.js` - S2S message relay
+- `server/server_to_server/js_parent_comm_server.js` - Parent server S2S
+- `server/server_to_server/js_child_comm_server.js` - Child server S2S
+- `server/js_s2s_auth.js` - Ed25519 S2S authentication
+- `server/js_udp_proxy.js` - UDP packet proxy
+- `server/js_andruavTasks_v2.js` - Task management
+- `js_constants.js` - Message types, routing constants
+- `helpers/` - Utility functions (args, strings, validation, colors)
+
+## Configuration
+Configuration is centralized in `server.config` (JSON format). Key sections:
+- Server identity (server_id, server_ip, server_port, public_host)
+- Database connection (MySQL credentials)
+- S2S authentication (Ed25519 private key, trusted public keys)
+- SSL/TLS certificates
+- Server roles (enable_super_server, enable_persistant_relay)
+- Parent/child server connection details
+- Logging configuration
+- Memory limits for auto-restart
+
+## Coding Standards
+- Use `global.m_logger` for logging (if enabled)
+- Use singleton pattern for chat server: `global.m_chat_server_singelton_get_instance()`
+- Several modules attached to `global` for easy access
+- Memory monitoring with auto-restart on limit exceeded
+- Error handling: check `global.m_logger` existence before use
+- Reuse utilities in `helpers/` directory
+
+## Message Routing
+Messages routed based on `ty` (type) and `tg` (target) fields:
+- **Types**: `'g'` (group broadcast), `'i'` (individual), `'s'` (system/local)
+- **Targets**: `'_GCS_'` (all GCS), `'_GD_'` (all units), `'_AGN_'` (all agents), or specific unit ID
+- **Loop prevention**: Uses `_path` array to track message traversal
+- **Local messages**: Forwarded to relay servers
+- **External messages**: Delivered locally only (no re-forwarding)
+
+## S2S Authentication
+- Uses Ed25519 cryptographic signatures
+- Child servers connect to parent with private key
+- Parent servers verify child signatures with trusted public keys
+- Challenge-response authentication flow
+- Keys generated via authenticator's `scripts/gen_s2s_keys.sh`
+
+## Database
+MySQL database for persistent storage:
+- User accounts
+- Communication server registration
+- Message history (if configured)
+- Task persistence
+
+## Development
+```bash
+npm install
+cp server.config server.config.local
+# Edit server.config.local
+mkdir -p server/ssl
+openssl req -x509 -newkey rsa:4096 -keyout server/ssl/domain.key -out server/ssl/domain.crt -days 365 -nodes
+npm start
+```
+
+## Testing
+```bash
+npm test
+npm run test:watch
+node --test test/unit/relay.test.js
+```
+
+## Deployment
+```bash
+# Parent server
+./deployment/run_parent.sh
+
+# Child server
+./deployment/run_slave.sh
+```
+
+## Security Features
+- SSL/TLS for WebSocket connections
+- Ed25519 cryptographic S2S authentication
+- Configurable trusted server keys
+- Memory limit monitoring with auto-restart
+- UDP proxy with kernel buffer management
+
+## UDP Proxy
+- Handles UDP packet forwarding between units
+- Kernel buffer size checking and adjustment
+- Fixed port configuration option
+- Used for MAVLink and other UDP protocols
+
+## Memory Management
+- Configurable memory limit (memory_max in MB)
+- Automatic server restart when limit exceeded
+- Memory monitoring every 60 seconds
+- Prevents memory leaks from causing crashes
+
+## Related Projects
+- droneegnage_authenticator - Authentication server
+- droneengage_communication - Communication protocol
+- droneengage_webclient_react - React web client
+- droneengage_mavlink - MAVLink integration
+
+## Documentation
+- README.md - User-facing documentation
+- wiki/MessagePropagation.md - Message routing and relay architecture
+- wiki/S2SAuthentication.md - Server-to-server authentication setup
+
+## Version
+3.9.11
