@@ -32,16 +32,10 @@ let m_privateKey = null;
 let m_publicKeys = null;
 
 
-/**
- * Returns true if S2S authentication is enabled in the config.
- */
-function fn_isEnabled() {
-    return global.m_serverconfig.m_configuration.s2s_auth_enabled === true;
-}
-
-
 function fn_resolvePath(p_path) {
-    return c_path.resolve(__dirname, p_path);
+    // Resolve relative to project root, not this module's directory
+    const c_projectRoot = c_path.resolve(__dirname, '..');
+    return c_path.resolve(c_projectRoot, p_path);
 }
 
 
@@ -184,7 +178,6 @@ module.exports = {
     CONST_S2S_AUTH_CHALLENGE,
     CONST_S2S_AUTH_RESPONSE,
     CONST_S2S_AUTH_HANDSHAKE_TIMEOUT,
-    fn_isEnabled,
     fn_generateNonce,
     fn_getPrivateKey,
     fn_getPublicKeys,

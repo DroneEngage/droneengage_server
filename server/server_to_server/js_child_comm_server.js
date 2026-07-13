@@ -24,7 +24,7 @@ class ChildCommServer {
   }
 
   connectToParent() {
-    
+
     // Optional: Add headers for authentication or other purposes
     const headers = {
       // 'Authorization': 'Bearer your-token',
@@ -35,11 +35,11 @@ class ChildCommServer {
       headers: headers,
       rejectUnauthorized: false, // Be very cautious with this in production!
     };
-  
 
-  const parentUrl = `wss://${this.m_parentHost}:${this.m_parentPort}`; // Construct the URL
+
+    const parentUrl = `wss://${this.m_parentHost}:${this.m_parentPort}`; // Construct the URL
     this.parentWs = new WebSocket(parentUrl
-      ,options
+      , options
     );
 
     this.parentWs.on('open', () => {
@@ -64,24 +64,22 @@ class ChildCommServer {
 
   onReceive(message) {
     try {
-        // Answer the parent (super server) S2S challenge by signing the nonce.
-        if (c_s2s_auth.fn_isEnabled() === true) {
-            const c_env = c_s2s_auth.fn_parseEnvelope(message);
-            if (c_env != null) {
-                if ((c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) && (this.parentWs != null)) {
-                    this.parentWs.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
-                }
-                return;
-            }
+      // Answer the parent (super server) S2S challenge by signing the nonce.
+      const c_env = c_s2s_auth.fn_parseEnvelope(message);
+      if (c_env != null) {
+        if ((c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) && (this.parentWs != null)) {
+          this.parentWs.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
         }
+        return;
+      }
 
-        console.log (`CHILD RX: ${message}`);
-                let v_isBinary = false;
-                if (typeof (message) !== 'string') {
-                        v_isBinary = true;
-                }
-                c_ChatServer.fn_parseExternalMessage( message, v_isBinary, this.parentWs);
-      
+      console.log(`CHILD RX: ${message}`);
+      let v_isBinary = false;
+      if (typeof (message) !== 'string') {
+        v_isBinary = true;
+      }
+      c_ChatServer.fn_parseExternalMessage(message, v_isBinary, this.parentWs);
+
     } catch (error) {
       console.error(`Error parsing message from parent:`, error);
     }
