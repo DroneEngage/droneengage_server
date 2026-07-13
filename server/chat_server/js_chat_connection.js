@@ -288,9 +288,31 @@ function fn_startChatServer() {
     // HTTPS server options
     const v_keyPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_key_file.toString()) ? global.m_serverconfig.m_configuration.ssl_key_file.toString() : v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_key_file.toString());
     const v_certPath = v_path.isAbsolute(global.m_serverconfig.m_configuration.ssl_cert_file.toString()) ? global.m_serverconfig.m_configuration.ssl_cert_file.toString() : v_path.join(__dirname, '../', global.m_serverconfig.m_configuration.ssl_cert_file.toString());
+    
+    let v_keyFile, v_certFile;
+    let v_hasError = false;
+    try {
+        v_keyFile = v_fs.readFileSync(v_keyPath);
+    } catch (e) {
+        console.log(global.Colors.Error + "FATAL ERROR: Cannot read SSL key file: " + global.Colors.Error + v_keyPath + global.Colors.Reset);
+        v_hasError = true;
+    }
+    
+    try {
+        v_certFile = v_fs.readFileSync(v_certPath);
+    } catch (e) {
+        console.log(global.Colors.Error + "FATAL ERROR: Cannot read SSL cert file: " + global.Colors.Error + v_certPath + global.Colors.Reset);
+        v_hasError = true;
+    }
+
+    if (v_hasError == true)
+    {
+        process.exit(1);
+    }
+    
     const options = {
-        key: v_fs.readFileSync(v_keyPath),
-        cert: v_fs.readFileSync(v_certPath)
+        key: v_keyFile,
+        cert: v_certFile
     };
 
     // Create HTTPS server with Express
