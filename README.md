@@ -86,13 +86,14 @@ Server-to-Server authentication using Ed25519 keys:
 
 ```json
 {
-    "s2s_auth_enabled": true,
     "s2s_my_private_key": "./ssl/s2s_ed25519_private.pem",
     "s2s_trusted_server_keys": {
         "ParentServer": "./ssl/ParentServer_public.pem"
     }
 }
 ```
+
+**Note:** Comm servers always attempt authentication when challenged. The accepting server (Auth Server or parent server) controls whether authentication is required via its `s2s_auth_enabled` configuration.
 
 See [wiki/S2SAuthentication.md](wiki/S2SAuthentication.md) for detailed setup.
 

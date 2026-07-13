@@ -12,7 +12,7 @@
  * No third-party dependency is used (Node built-in 'crypto').
  *
  * Config keys (in server config file):
- *   s2s_auth_enabled       : true/false   - enable the handshake on this node.
+ *   s2s_auth_enabled       : true/false   - enable the handshake on this node (Auth Server only).
  *   s2s_my_private_key     : PEM path     - used when this node CONNECTS out.
  *   s2s_trusted_server_keys: object       - mapping of server_id to public key file paths (when ACCEPTING peers).
  *                                   Example: { "child1": "./ssl/child1_public.pem", "child2": "./ssl/child2_public.pem" }
@@ -30,14 +30,6 @@ const CONST_S2S_AUTH_HANDSHAKE_TIMEOUT = 8000; // ms to complete handshake befor
 
 let m_privateKey = null;
 let m_publicKeys = null;
-
-
-/**
- * Returns true if S2S authentication is enabled in the config.
- */
-function fn_isEnabled() {
-    return global.m_serverconfig.m_configuration.s2s_auth_enabled === true;
-}
 
 
 function fn_resolvePath(p_path) {
@@ -184,7 +176,6 @@ module.exports = {
     CONST_S2S_AUTH_CHALLENGE,
     CONST_S2S_AUTH_RESPONSE,
     CONST_S2S_AUTH_HANDSHAKE_TIMEOUT,
-    fn_isEnabled,
     fn_generateNonce,
     fn_getPrivateKey,
     fn_getPublicKeys,

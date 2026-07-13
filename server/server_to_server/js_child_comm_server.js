@@ -65,14 +65,12 @@ class ChildCommServer {
   onReceive(message) {
     try {
         // Answer the parent (super server) S2S challenge by signing the nonce.
-        if (c_s2s_auth.fn_isEnabled() === true) {
-            const c_env = c_s2s_auth.fn_parseEnvelope(message);
-            if (c_env != null) {
-                if ((c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) && (this.parentWs != null)) {
-                    this.parentWs.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
-                }
-                return;
+        const c_env = c_s2s_auth.fn_parseEnvelope(message);
+        if (c_env != null) {
+            if ((c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) && (this.parentWs != null)) {
+                this.parentWs.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
             }
+            return;
         }
 
         console.log (`CHILD RX: ${message}`);

@@ -68,21 +68,16 @@ class ParentCommServer {
       // before any of its relayed traffic is trusted or forwarded.
       child_ws.m_s2s_authed = false;
       let v_authTimer = null;
-      if (c_s2s_auth.fn_isEnabled() === true) {
-        const c_nonce = c_s2s_auth.fn_generateNonce();
-        child_ws.m_s2s_nonce = c_nonce;
-        child_ws.send(c_s2s_auth.fn_buildChallenge(c_nonce));
+      const c_nonce = c_s2s_auth.fn_generateNonce();
+      child_ws.m_s2s_nonce = c_nonce;
+      child_ws.send(c_s2s_auth.fn_buildChallenge(c_nonce));
 
-        v_authTimer = setTimeout(() => {
-          if (child_ws.m_s2s_authed !== true) {
-            console.log(`${global.Colors.Error}[ATTENTION!!] Child ${clientKey} failed S2S handshake (timeout)${global.Colors.Reset}`);
-            child_ws.terminate();
-          }
-        }, c_s2s_auth.CONST_S2S_AUTH_HANDSHAKE_TIMEOUT);
-      }
-      else {
-        child_ws.m_s2s_authed = true;
-      }
+      v_authTimer = setTimeout(() => {
+        if (child_ws.m_s2s_authed !== true) {
+          console.log(`${global.Colors.Error}[ATTENTION!!] Child ${clientKey} failed S2S handshake (timeout)${global.Colors.Reset}`);
+          child_ws.terminate();
+        }
+      }, c_s2s_auth.CONST_S2S_AUTH_HANDSHAKE_TIMEOUT);
 
       child_ws.on('close', () => {
         this.clientData.delete(clientKey); // Remove client on close
