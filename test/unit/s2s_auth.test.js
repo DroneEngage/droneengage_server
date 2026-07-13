@@ -41,26 +41,6 @@ test.afterEach(() => {
 
 
 // ---------------------------------------------------------------------------
-// fn_isEnabled
-// ---------------------------------------------------------------------------
-
-test('fn_isEnabled returns false when s2s_auth_enabled is not set', () => {
-    installFakeGlobals({});
-    assert.strictEqual(c_s2s_auth.fn_isEnabled(), false);
-});
-
-test('fn_isEnabled returns false when s2s_auth_enabled is false', () => {
-    installFakeGlobals({ s2s_auth_enabled: false });
-    assert.strictEqual(c_s2s_auth.fn_isEnabled(), false);
-});
-
-test('fn_isEnabled returns true when s2s_auth_enabled is true', () => {
-    installFakeGlobals({ s2s_auth_enabled: true });
-    assert.strictEqual(c_s2s_auth.fn_isEnabled(), true);
-});
-
-
-// ---------------------------------------------------------------------------
 // fn_generateNonce
 // ---------------------------------------------------------------------------
 

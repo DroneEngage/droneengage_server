@@ -45,7 +45,7 @@ Core components:
 Configuration is centralized in `server.config` (JSON format). Key sections:
 - Server identity (server_id, server_ip, server_port, public_host)
 - Database connection (MySQL credentials)
-- S2S authentication (Ed25519 private key, trusted public keys)
+- S2S authentication (Ed25519 private key, trusted public keys for parent mode)
 - SSL/TLS certificates
 - Server roles (enable_super_server, enable_persistant_relay)
 - Parent/child server connection details
@@ -74,6 +74,7 @@ Messages routed based on `ty` (type) and `tg` (target) fields:
 - Parent servers verify child signatures with trusted public keys
 - Challenge-response authentication flow
 - Keys generated via authenticator's `scripts/gen_s2s_keys.sh`
+- **Note:** Comm servers always attempt authentication when challenged. The accepting server (Auth Server or parent server) controls whether authentication is required via its configuration.
 
 ## Database
 MySQL database for persistent storage:

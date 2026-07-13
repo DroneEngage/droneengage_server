@@ -14,12 +14,10 @@ let Me;
 function fn_onOpen_Handler() {
     console.log(`${global.Colors.BSuccess}[OK] Connection established with AuthServer${global.Colors.Reset}`);
 
-    // When S2S auth is enabled we must wait for the AuthServer challenge and answer it
-    // before announcing ourselves. fn_onMessageOpened (which sends our INFO card) is
-    // therefore deferred until the handshake completes (see fn_onMessage_Handler).
-    if (c_s2s_auth.fn_isEnabled() === true) {
-        return;
-    }
+    // Wait for the AuthServer challenge and answer it before announcing ourselves.
+    // fn_onMessageOpened (which sends our INFO card) is deferred until the handshake
+    // completes (see fn_onMessage_Handler).
+    return;
 
     if (Me.fn_onMessageOpened) {
         Me.fn_onMessageOpened();
@@ -49,20 +47,18 @@ function fn_onError_Handler(err) {
 function fn_onMessage_Handler(data) {
     // Answer the AuthServer S2S challenge by signing the nonce with our private key.
     // Once answered, announce ourselves (fn_onMessageOpened sends the INFO card).
-    if (c_s2s_auth.fn_isEnabled() === true) {
-        const c_env = c_s2s_auth.fn_parseEnvelope(data);
-        if (c_env != null) {
-            if (c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) {
-                try {
-                    m_ws.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
-                    if (Me.fn_onMessageOpened) {
-                        Me.fn_onMessageOpened();
-                    }
+    const c_env = c_s2s_auth.fn_parseEnvelope(data);
+    if (c_env != null) {
+        if (c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) {
+            try {
+                m_ws.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
+                if (Me.fn_onMessageOpened) {
+                    Me.fn_onMessageOpened();
                 }
-                catch (ex) {
-                    console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_my_private_key): ${ex}${global.Colors.Reset}`);
-                    m_ws.close();
-                }
+            }
+            catch (ex) {
+                console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_my_private_key): ${ex}${global.Colors.Reset}`);
+                m_ws.close();
             }
             return;
         }
