@@ -41,8 +41,8 @@ cp server.config server.config.local
 # Edit server.config.local with your settings
 
 # Generate SSL certificates (if needed)
-mkdir -p server/ssl
-openssl req -x509 -newkey rsa:4096 -keyout server/ssl/domain.key -out server/ssl/domain.crt -days 365 -nodes
+mkdir -p ssl_local/ssl_airgap
+openssl req -x509 -newkey rsa:4096 -keyout ssl_local/ssl_airgap/domain.key -out ssl_local/ssl_airgap/domain.crt -days 365 -nodes
 ```
 
 ## Configuration
@@ -86,9 +86,9 @@ Server-to-Server authentication using Ed25519 keys:
 
 ```json
 {
-    "s2s_my_private_key": "./ssl/s2s_ed25519_private.pem",
+    "s2s_my_private_key": "./ssl_local/<server_id>_private.pem",
     "s2s_trusted_server_keys": {
-        "ParentServer": "./ssl/ParentServer_public.pem"
+        "ParentServer": "./ssl_local/ParentServer_public.pem"
     }
 }
 ```
@@ -247,8 +247,8 @@ Example configuration files are provided in the `deployment/` directory:
 andruav_server/
 ├── server/
 │   ├── chat_server/          # Message routing logic
-│   ├── server_to_server/     # S2S communication
-│   └── ssl/                  # SSL certificates
+│   └── server_to_server/     # S2S communication
+├── ssl_local/                # SSL certificates and S2S keys
 ├── deployment/               # Deployment configurations
 ├── test/
 │   ├── unit/                 # Unit tests

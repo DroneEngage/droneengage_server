@@ -88,8 +88,8 @@ MySQL database for persistent storage:
 npm install
 cp server.config server.config.local
 # Edit server.config.local
-mkdir -p server/ssl
-openssl req -x509 -newkey rsa:4096 -keyout server/ssl/domain.key -out server/ssl/domain.crt -days 365 -nodes
+mkdir -p ssl_local/ssl_airgap
+openssl req -x509 -newkey rsa:4096 -keyout ssl_local/ssl_airgap/domain.key -out ssl_local/ssl_airgap/domain.crt -days 365 -nodes
 npm start
 ```
 

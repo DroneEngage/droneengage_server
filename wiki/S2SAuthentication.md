@@ -50,7 +50,7 @@ This creates files in the current directory:
 **For each Communication Server:**
 ```bash
 # Copy the private key to the server's ssl directory
-cp AndruavLap_private.pem /path/to/andruav_server/server/ssl/s2s_ed25519_private.pem
+cp AndruavLap_private.pem /path/to/andruav_server/ssl_local/DE_CommSrv_private.pem
 ```
 
 **For the Auth Server:**
@@ -66,9 +66,9 @@ cp DronCommServer_public.pem /path/to/andruav_authenticator/ssl/
 **For the Parent (Super) Server:**
 ```bash
 # Copy the private key for the parent server itself
-cp SuperServer_private.pem /path/to/andruav_server/server/ssl/s2s_ed25519_private.pem
+cp SuperServer_private.pem /path/to/andruav_server/ssl_local/SuperServer_private.pem
 # Copy child server public keys
-cp DronCommServer_public.pem /path/to/andruav_server/server/ssl/
+cp DronCommServer_public.pem /path/to/andruav_server/ssl_local/
 ```
 
 ### 3. Configure Accepting Servers
@@ -77,18 +77,18 @@ cp DronCommServer_public.pem /path/to/andruav_server/server/ssl/
 ```json
 "s2s_auth_enabled": true,
 "s2s_trusted_server_keys": {
-    "AndruavLap": "./ssl/AndruavLap_public.pem",
-    "SuperServer": "./ssl/SuperServer_public.pem",
-    "DronCommServer": "./ssl/DronCommServer_public.pem"
+    "AndruavLap": "./ssl_local/AndruavLap_public.pem",
+    "SuperServer": "./ssl_local/SuperServer_public.pem",
+    "DronCommServer": "./ssl_local/DronCommServer_public.pem"
 }
 ```
 
 **Parent Super Server (`deployment/server.s2s.super.config`):**
 ```json
 "s2s_auth_enabled": true,
-"s2s_my_private_key": "./ssl/SuperServer_private.pem",
+"s2s_my_private_key": "./ssl_local/SuperServer_private.pem",
 "s2s_trusted_server_keys": {
-    "DronCommServer": "./ssl/DronCommServer_public.pem"
+    "DronCommServer": "./ssl_local/DronCommServer_public.pem"
 }
 ```
 
@@ -97,13 +97,13 @@ cp DronCommServer_public.pem /path/to/andruav_server/server/ssl/
 **Communication Server (`server.config`):**
 ```json
 "s2s_auth_enabled": true,
-"s2s_my_private_key": "./ssl/s2s_ed25519_private.pem"
+"s2s_my_private_key": "./ssl_local/<server_id>_private.pem"
 ```
 
 **Child/Drone Server (`deployment/server.s2s.drone.config`):**
 ```json
 "s2s_auth_enabled": true,
-"s2s_my_private_key": "./ssl/s2s_ed25519_private.pem"
+"s2s_my_private_key": "./ssl_local/<server_id>_private.pem"
 ```
 
 **Note:** Connecting servers only need the private key file since they don't accept connections.
@@ -126,10 +126,10 @@ Restart all servers to apply the configuration changes.
 
 | Server | Private Key | Public Keys |
 |--------|-------------|-------------|
-| Auth Server | Not needed | `./ssl/<server_id>_public.pem` for each comm server |
-| Comm Server (connecting only) | `./server/ssl/s2s_ed25519_private.pem` | Not needed |
-| Parent Super Server | `./server/ssl/s2s_ed25519_private.pem` | `./server/ssl/<child_id>_public.pem` for each child |
-| Child Server | `./server/ssl/s2s_ed25519_private.pem` | Not needed |
+| Auth Server | Not needed | `./ssl_local/<server_id>_public.pem` for each comm server |
+| Comm Server (connecting only) | `./ssl_local/<server_id>_private.pem` | Not needed |
+| Parent Super Server | `./ssl_local/<server_id>_private.pem` | `./ssl_local/<child_id>_public.pem` for each child |
+| Child Server | `./ssl_local/<server_id>_private.pem` | Not needed |
 
 ## Security Best Practices
 
