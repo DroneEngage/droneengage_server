@@ -14,14 +14,10 @@ let Me;
 function fn_onOpen_Handler() {
     console.log(`${global.Colors.BSuccess}[OK] Connection established with AuthServer${global.Colors.Reset}`);
 
-    // Wait for the AuthServer challenge and answer it before announcing ourselves.
-    // fn_onMessageOpened (which sends our INFO card) is deferred until the handshake
-    // completes (see fn_onMessage_Handler).
+    // S2S auth is always enabled - wait for the AuthServer challenge and answer it
+    // before announcing ourselves. fn_onMessageOpened (which sends our INFO card) is
+    // therefore deferred until the handshake completes (see fn_onMessage_Handler).
     return;
-
-    if (Me.fn_onMessageOpened) {
-        Me.fn_onMessageOpened();
-    }
 }
 
 /**
@@ -60,8 +56,8 @@ function fn_onMessage_Handler(data) {
                 console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_my_private_key): ${ex}${global.Colors.Reset}`);
                 m_ws.close();
             }
-            return;
         }
+        return;
     }
 
     if (Me.fn_onMessageReceived) {
