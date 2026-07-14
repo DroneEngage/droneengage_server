@@ -33,7 +33,9 @@ let m_publicKeys = null;
 
 
 function fn_resolvePath(p_path) {
-    return c_path.resolve(__dirname, '..', p_path);
+    // Resolve relative to project root, not this module's directory
+    const c_projectRoot = c_path.resolve(__dirname, '..');
+    return c_path.resolve(c_projectRoot, p_path);
 }
 
 
