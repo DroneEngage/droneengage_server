@@ -58,7 +58,7 @@ function fn_cancelLoginRequestBySenderID(p_requestID) {
         const c_LoginRequest = m_waitingAccounts[c_keys[i]];
         if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID) {
             delete m_waitingAccounts[c_keys[i]];
-            c_CommServerManagerClient.fn_onMessageOpened();
+            c_CommServerManagerClient.fn_updateAuthServer();
             return;
         }
     }
@@ -249,7 +249,7 @@ function fn_startServer() {
 
     if (global.m_serverconfig.m_configuration.ignore_auth_server !== true) {
         m_commServerManagerClient.fn_onMessageReceived = fn_AuthServerMessagesHandler;
-        m_commServerManagerClient.fn_onMessageOpened = fn_AuthServerConnectionHandler;
+        m_commServerManagerClient.fn_updateAuthServer = fn_AuthServerConnectionHandler;
     
         m_commServerManagerClient.fn_startServer();
     }
