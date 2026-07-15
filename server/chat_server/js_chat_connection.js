@@ -102,7 +102,7 @@ function acceptConnection(v_loginTempKey, c_params, p_ws) {
 
             _acceptConnection(c_onb, p_ws);
 
-            c_CommServerManagerClient.fn_onMessageOpened(); // give feedback to AUTH server
+            c_CommServerManagerClient.fn_updateAuthServer(); // give feedback to AUTH server
         }
         else {
             p_ws.m_loginRequest = null;
@@ -200,11 +200,20 @@ function fn_onConnect_Handler(p_ws, p_req) {
             c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
         }
 
-        // remove from active senderIDs list.
+        // remove from active senderIDs list and notify auth server.
         if (p_ws.m_loginRequest != null) {
             c_andruav_active_senders.deleteActiveSenderIDList(p_ws.m_loginRequest.m_senderID);
-            if (c_CommServerManagerClient.fn_onMessageOpened) {
-                c_CommServerManagerClient.fn_onMessageOpened();
+            
+            // Send logout notification to auth server
+            const c_logout_msg = {
+                'c': c_CONSTANTS.CONST_CS_CMD_LOGOUT_REQUEST,
+                'd': {}
+            };
+            c_logout_msg.d[c_CONSTANTS.CONST_CS_SENDER_ID.toString()] = p_ws.m_loginRequest.m_senderID;
+            c_CommServerManagerClient.fn_sendMessage(JSON.stringify(c_logout_msg));
+            
+            if (c_CommServerManagerClient.fn_updateAuthServer) {
+                c_CommServerManagerClient.fn_updateAuthServer();
             }
         }
     }
