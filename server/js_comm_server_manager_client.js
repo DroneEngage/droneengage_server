@@ -15,7 +15,7 @@ function fn_onOpen_Handler() {
     console.log(`${global.Colors.BSuccess}[OK] Connection established with AuthServer${global.Colors.Reset}`);
 
     // S2S auth is always enabled - wait for the AuthServer challenge and answer it
-    // before announcing ourselves. fn_onMessageOpened (which sends our INFO card) is
+    // before announcing ourselves. fn_updateAuthServer (which sends our INFO card) is
     // therefore deferred until the handshake completes (see fn_onMessage_Handler).
     return;
 }
@@ -42,14 +42,14 @@ function fn_onError_Handler(err) {
  */
 function fn_onMessage_Handler(data) {
     // Answer the AuthServer S2S challenge by signing the nonce with our private key.
-    // Once answered, announce ourselves (fn_onMessageOpened sends the INFO card).
+    // Once answered, announce ourselves (fn_updateAuthServer sends the INFO card).
     const c_env = c_s2s_auth.fn_parseEnvelope(data);
     if (c_env != null) {
         if (c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) {
             try {
                 m_ws.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
-                if (Me.fn_onMessageOpened) {
-                    Me.fn_onMessageOpened();
+                if (Me.fn_updateAuthServer) {
+                    Me.fn_updateAuthServer();
                 }
             }
             catch (ex) {
@@ -93,7 +93,7 @@ function fn_sendMessage(p_message) {
 
 // Expose message handlers
 exports.fn_onMessageReceived = undefined;
-exports.fn_onMessageOpened = undefined;
+exports.fn_updateAuthServer = undefined;
 
 module.exports = {
     fn_startServer,
