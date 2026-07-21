@@ -10,6 +10,7 @@ The communication server provides:
 - Message routing with group and individual targeting
 - System commands and task management
 - Server-to-Server (S2S) authentication for secure relay connections
+- Storage server integration via DBProxyClient for task persistence
 
 ### Server Roles
 
@@ -53,10 +54,12 @@ The server is configured via `server.config` (JSON format). Key settings:
 
 ```json
 {
-    "server_id": "MyServer",
-    "server_ip": "0.0.0.0",
+    "server_id": "DE_CommSrv",
+    "server_ip": "::",
+    "public_host": "127.0.0.1",
     "server_port": 9966,
-    "public_host": "127.0.0.1"
+    "s2s_ws_target_ip": "127.0.0.1",
+    "s2s_ws_target_port": "19001"
 }
 ```
 
@@ -82,14 +85,11 @@ The server is configured via `server.config` (JSON format). Key settings:
 
 ### S2S Authentication
 
-Server-to-Server authentication using Ed25519 keys:
+Server-to-Server authentication using Ed25519 keys. The comm server signs challenges with its private key:
 
 ```json
 {
-    "s2s_my_private_key": "./ssl_local/<server_id>_private.pem",
-    "s2s_trusted_server_keys": {
-        "ParentServer": "./ssl_local/ParentServer_public.pem"
-    }
+    "s2s_my_private_key": "./ssl_local/DE_ServerComm_private.pem"
 }
 ```
 
@@ -101,10 +101,10 @@ See [wiki/S2SAuthentication.md](wiki/S2SAuthentication.md) for detailed setup.
 
 ```json
 {
-    "enable_SSL": true,
-    "ssl_key_file": "./ssl/privkey.pem",
-    "ssl_cert_file": "./ssl/fullchain.pem",
-    "allow_fake_SSL": true
+    "ssl_key_file": "./ssl_local/ssl_airgap/domain.key",
+    "ssl_cert_file": "./ssl_local/ssl_airgap/domain.crt",
+    "allow_fake_SSL": true,
+    "ca_cert_path": "./ssl_local/ssl_airgap/root.crt"
 }
 ```
 
@@ -118,6 +118,27 @@ See [wiki/S2SAuthentication.md](wiki/S2SAuthentication.md) for detailed setup.
     "dbdatabase": "andruav"
 }
 ```
+
+### Storage Server Integration
+
+The comm server connects directly to a storage server for task persistence:
+
+```json
+{
+    "enable_storage_server": true,
+    "storage_server_host": "127.0.0.1",
+    "storage_server_port": 9000
+}
+```
+
+The DBProxyClient handles:
+- Direct WebSocket connection to storage server (always wss://)
+- S2S authentication using Ed25519 keys (independent of SSL)
+- Exponential backoff reconnection on disconnect
+- Periodic heartbeat (30s) with connection status reporting to AUTH
+- Task operations (LoadTasks, SaveTasks, DeleteTasks, DisableTasks)
+
+SSL is independent of S2S certificate authentication - similar to the AUTH <--> CommServer pattern. The storage server has its own SSL configuration.
 
 ## Running the Server
 
@@ -244,10 +265,12 @@ Example configuration files are provided in the `deployment/` directory:
 ## Project Structure
 
 ```
-andruav_server/
+droneengage_server/
 ├── server/
 │   ├── chat_server/          # Message routing logic
+│   │   └── js_chat_tasks.js  # Task handlers with DBProxyClient integration
 │   └── server_to_server/     # S2S communication
+│       └── js_db_proxy_client.js  # Storage server client
 ├── ssl_local/                # SSL certificates and S2S keys
 ├── deployment/               # Deployment configurations
 ├── test/

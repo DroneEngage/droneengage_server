@@ -10,14 +10,17 @@ const c_s2s_auth = require('./js_s2s_auth.js');
 const CONST_S2S_WS_RETRY_TIME = 2000;
 let m_ws;
 let Me;
+let m_messageQueue = [];
 
 function fn_onOpen_Handler() {
     console.log(`${global.Colors.BSuccess}[OK] Connection established with AuthServer${global.Colors.Reset}`);
 
-    // S2S auth is always enabled - wait for the AuthServer challenge and answer it
-    // before announcing ourselves. fn_updateAuthServer (which sends our INFO card) is
-    // therefore deferred until the handshake completes (see fn_onMessage_Handler).
-    return;
+    // Announce ourselves to Auth server immediately
+    // If S2S auth is enabled, we'll also send INFO after completing the handshake
+    if (Me.fn_updateAuthServer) {
+        Me.fn_updateAuthServer();
+    }
+    fn_flushQueue();
 }
 
 /**
@@ -27,6 +30,7 @@ function fn_onOpen_Handler() {
  */
 function fn_onClose_Handler() {
     console.log(`${global.Colors.Error}ATTENTION!! Connection closed with AuthServer${global.Colors.Reset}`);
+    m_messageQueue.length = 0;
 
     const c_url = `wss://${global.m_serverconfig.m_configuration.s2s_ws_target_ip}:${global.m_serverconfig.m_configuration.s2s_ws_target_port}`;
     setTimeout(() => fn_startWebSocketListener(c_url), CONST_S2S_WS_RETRY_TIME);
@@ -51,6 +55,7 @@ function fn_onMessage_Handler(data) {
                 if (Me.fn_updateAuthServer) {
                     Me.fn_updateAuthServer();
                 }
+                fn_flushQueue();
             }
             catch (ex) {
                 console.error(`${global.Colors.Error}ATTENTION!! S2S handshake failed (check s2s_my_private_key): ${ex}${global.Colors.Reset}`);
@@ -85,9 +90,17 @@ function fn_startServer() {
     fn_startWebSocketListener(c_url);
 }
 
+function fn_flushQueue() {
+    while (m_ws && m_ws.readyState === m_ws.OPEN && m_messageQueue.length > 0) {
+        m_ws.send(m_messageQueue.shift());
+    }
+}
+
 function fn_sendMessage(p_message) {
-    if (m_ws) {
+    if (m_ws && m_ws.readyState === m_ws.OPEN) {
         m_ws.send(p_message);
+    } else if (m_ws || m_messageQueue.length < 1000) {
+        m_messageQueue.push(p_message);
     }
 }
 

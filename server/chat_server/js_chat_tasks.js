@@ -10,6 +10,7 @@
 
 const c_dumpError = require("../../dumperror.js");
 const c_CONSTANTS = require("../../js_constants.js");
+const c_dbProxyClient = require("../server_to_server/js_db_proxy_client.js");
 
 
 let v_andruavTasks = null;
@@ -92,8 +93,53 @@ function fn_makeDoneResultFunc(p_ws, v_jmsg, p_messageType, p_useAffectedRows) {
 
 
 function fn_handleLoadTasks(v_jmsg, p_ws) {
-    if (v_andruavTasks == null) return;
     c_dumpError.fn_dumpdebug("load tasks command");
+    const mms = fn_parseMessageBody(v_jmsg);
+
+    if ((mms.ai == null) || (mms.ai.length == 0)) {
+        return; // error List all crosee accounts tasks ... ERROR
+    }
+    c_dumpError.fn_dumpdebug(mms);
+
+    if (c_dbProxyClient.fn_isConnected()) {
+        c_dbProxyClient.fn_sendRequest(c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks, { unitId: mms.ai })
+            .then(function (p_response) {
+                if ((p_response.success !== true) || (p_response.ms == null) || (p_response.ms.tasks == null)) return;
+                const c_tasks = p_response.ms.tasks;
+                for (let i = 0; i < c_tasks.length; i++) {
+                    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                    v_jmsg.tg = p_ws.name; // sender = target
+                    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                    v_jmsg.sid = c_tasks[i].taskId;
+                    v_jmsg.ms = c_tasks[i].data;
+                    v_jmsg.mt = c_tasks[i].messageType != null ? c_tasks[i].messageType : mms.messageType;
+                    p_ws.send(JSON.stringify(v_jmsg));
+                }
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                // Send error to client
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks;
+                v_jmsg.ms = "Error: Failed to load tasks from storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    // Send error if DBProxyClient is not connected
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks;
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+    return; // Do not fall through to legacy fallback
+
+    if (v_andruavTasks == null) return;
     let v_params = {
         resultfunc: function (res) {
             if (res.length == 0) {
@@ -119,12 +165,6 @@ function fn_handleLoadTasks(v_jmsg, p_ws) {
         }
     };
 
-    const mms = fn_parseMessageBody(v_jmsg);
-
-    if ((mms.ai == null) || (mms.ai.length == 0)) {
-        return; // error List all crosee accounts tasks ... ERROR
-    }
-    c_dumpError.fn_dumpdebug(mms);
     c_dumpError.fn_dumpdebug(mms.messageType);
     //{resultfunc,errfunc,largerThan_SID, party_sid,sender,receiver,messageType,task,isPermanent}
     fn_fillTaskParams(mms, v_params, { includeLts: true });
@@ -134,16 +174,57 @@ function fn_handleLoadTasks(v_jmsg, p_ws) {
 
 
 function fn_handleSaveTasks(v_jmsg, p_ws) {
-    if (v_andruavTasks == null) return;
     c_dumpError.fn_dumpdebug("save tasks command");
-    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks, false);
-
     const mms = fn_parseMessageBody(v_jmsg);
     c_dumpError.fn_dumpdebug(mms);
     if ((mms.ai == null) || (mms.ai.length == 0)) {
         return; // error List all crosee accounts tasks ... ERROR
     }
 
+    if (c_dbProxyClient.fn_isConnected()) {
+        // The legacy protocol only carries a single task (mms.t) per SaveTasks call.
+        // Reuse mms.t.id as a stable taskId if present, otherwise generate one.
+        if ((mms.t != null) && (mms.t.id == null)) mms.t.id = require('uuid').v4();
+        const c_taskId = (mms.t != null) ? mms.t.id : require('uuid').v4();
+
+        c_dbProxyClient.fn_sendRequest(c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks, {
+            unitId: mms.ai,
+            tasks: [{ taskId: c_taskId, name: mms.messageType, data: mms.t }]
+        })
+            .then(function (p_response) {
+                if (p_response.success !== true) return;
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
+                v_jmsg.ms = "Done";
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                // Send error to client
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
+                v_jmsg.ms = "Error: Failed to save tasks to storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    // Send error if DBProxyClient is not connected
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks;
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+    return; // Do not fall through to legacy fallback
+
+    if (v_andruavTasks == null) return;
+    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks, false);
     fn_fillTaskParams(mms, v_params, { includeTask: true });
     c_dumpError.fn_dumpdebug(v_params);
     v_andruavTasks.fn_add_task(v_params);
@@ -151,16 +232,55 @@ function fn_handleSaveTasks(v_jmsg, p_ws) {
 
 
 function fn_handleDeleteTasks(v_jmsg, p_ws) {
-    if (v_andruavTasks == null) return;
     c_dumpError.fn_dumpdebug("delete tasks command");
-    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', false);
-
     const mms = fn_parseMessageBody(v_jmsg);
     c_dumpError.fn_dumpdebug(mms);
     if ((mms.ai == null) || (mms.ai.length == 0)) {
         return; // error List all crosee accounts tasks ... ERROR
     }
 
+    if (c_dbProxyClient.fn_isConnected()) {
+        const c_taskId = (mms.t != null) ? mms.t.id : null;
+        if (c_taskId == null) return; // nothing identifiable to delete
+
+        c_dbProxyClient.fn_sendRequest(c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks, {
+            unitId: mms.ai,
+            taskIds: [c_taskId]
+        })
+            .then(function (p_response) {
+                if (p_response.success !== true) return;
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = '9003';
+                v_jmsg.ms = "Done";
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                // Send error to client
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = '9003';
+                v_jmsg.ms = "Error: Failed to delete tasks from storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    // Send error if DBProxyClient is not connected
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = '9003';
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+    return; // Do not fall through to legacy fallback
+
+    if (v_andruavTasks == null) return;
+    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', false);
     fn_fillTaskParams(mms, v_params, { includeTask: true });
     c_dumpError.fn_dumpdebug(v_params);
     //v_andruavTasks.delete_tasks(v_params);
@@ -169,14 +289,54 @@ function fn_handleDeleteTasks(v_jmsg, p_ws) {
 
 function fn_handleDisableTasks(v_jmsg, p_ws) {
     c_dumpError.fn_dumpdebug("disable tasks command");
-    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', true);
-
     const mms = fn_parseMessageBody(v_jmsg);
     if ((mms.ai == null) || (mms.ai.length == 0)) {
         return; // No Global wide operation is allowed
     }
-
     c_dumpError.fn_dumpdebug(mms);
+
+    if (c_dbProxyClient.fn_isConnected()) {
+        const c_taskId = (mms.t != null) ? mms.t.id : null;
+        if (c_taskId == null) return;
+
+        c_dbProxyClient.fn_sendRequest(c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks, {
+            unitId: mms.ai,
+            taskIds: [c_taskId]
+        })
+            .then(function (p_response) {
+                if (p_response.success !== true) return;
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = '9003';
+                v_jmsg.ms = "Done";
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                // Send error to client
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = '9003';
+                v_jmsg.ms = "Error: Failed to disable tasks in storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    // Send error if DBProxyClient is not connected
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = '9003';
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+    return; // Do not fall through to legacy fallback
+
+    if (v_andruavTasks == null) return;
+    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', true);
     fn_fillTaskParams(mms, v_params, { includeTask: true });
     c_dumpError.fn_dumpdebug(v_params);
     v_andruavTasks.fn_disable_tasks(v_params);
