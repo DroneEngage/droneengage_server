@@ -252,7 +252,7 @@ function fn_handleDeleteTasks(v_jmsg, p_ws) {
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-                v_jmsg.mt = '9003';
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks;
                 v_jmsg.ms = "Done";
                 p_ws.send(JSON.stringify(v_jmsg));
             })
@@ -262,7 +262,7 @@ function fn_handleDeleteTasks(v_jmsg, p_ws) {
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-                v_jmsg.mt = '9003';
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks;
                 v_jmsg.ms = "Error: Failed to delete tasks from storage server";
                 p_ws.send(JSON.stringify(v_jmsg));
             });
@@ -274,13 +274,13 @@ function fn_handleDeleteTasks(v_jmsg, p_ws) {
     v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
     v_jmsg.tg = p_ws.name;
     v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-    v_jmsg.mt = '9003';
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks;
     v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
     p_ws.send(JSON.stringify(v_jmsg));
     return; // Do not fall through to legacy fallback
 
     if (v_andruavTasks == null) return;
-    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', false);
+    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks, false);
     fn_fillTaskParams(mms, v_params, { includeTask: true });
     c_dumpError.fn_dumpdebug(v_params);
     //v_andruavTasks.delete_tasks(v_params);
@@ -308,7 +308,7 @@ function fn_handleDisableTasks(v_jmsg, p_ws) {
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-                v_jmsg.mt = '9003';
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks;
                 v_jmsg.ms = "Done";
                 p_ws.send(JSON.stringify(v_jmsg));
             })
@@ -318,7 +318,7 @@ function fn_handleDisableTasks(v_jmsg, p_ws) {
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-                v_jmsg.mt = '9003';
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks;
                 v_jmsg.ms = "Error: Failed to disable tasks in storage server";
                 p_ws.send(JSON.stringify(v_jmsg));
             });
@@ -330,13 +330,13 @@ function fn_handleDisableTasks(v_jmsg, p_ws) {
     v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
     v_jmsg.tg = p_ws.name;
     v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
-    v_jmsg.mt = '9003';
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks;
     v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
     p_ws.send(JSON.stringify(v_jmsg));
     return; // Do not fall through to legacy fallback
 
     if (v_andruavTasks == null) return;
-    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, '9003', true);
+    let v_params = fn_makeDoneResultFunc(p_ws, v_jmsg, c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks, true);
     fn_fillTaskParams(mms, v_params, { includeTask: true });
     c_dumpError.fn_dumpdebug(v_params);
     v_andruavTasks.fn_disable_tasks(v_params);

@@ -18,9 +18,14 @@ const { installFakeGlobals, restoreGlobals, makeFakeWs } = require('../helpers/t
 const c_CONSTANTS = require('../../js_constants.js');
 
 const c_tasks = require('../../server/chat_server/js_chat_tasks.js');
+const c_dbProxyClient = require('../../server/server_to_server/js_db_proxy_client.js');
 
 
-test.afterEach(() => restoreGlobals());
+test.afterEach(() => {
+    restoreGlobals();
+    c_dbProxyClient.fn_isConnected = () => false;
+    c_dbProxyClient.fn_sendRequest = () => Promise.reject(new Error('DBProxyClient is not connected to a storage server'));
+});
 
 
 // ---------------------------------------------------------------------------
@@ -133,25 +138,58 @@ test('fn_makeDoneResultFunc (affectedRows mode) uses res.affectedRows', () => {
 // Handler guards (no DB backend initialized)
 // ---------------------------------------------------------------------------
 
-test('fn_handleLoadTasks returns without replying when tasks backend is not initialized', () => {
+test('fn_handleLoadTasks replies with storage-not-connected error when DB proxy is offline', () => {
     installFakeGlobals({});
     const ws = makeFakeWs({ name: 'unit1' });
     c_tasks.fn_handleLoadTasks({ ms: { ai: 'acc@x.com' } }, ws);
-    assert.strictEqual(ws.sent.length, 0);
+    assert.strictEqual(ws.sent.length, 1);
+    const reply = JSON.parse(ws.sent[0]);
+    assert.strictEqual(reply.mt, c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks);
+    assert.ok(reply.ms.includes('Storage server not connected'));
 });
 
-test('fn_handleSaveTasks returns without replying when tasks backend is not initialized', () => {
+test('fn_handleLoadTasks forwards LoadTasks to storage server when DB proxy is connected', async () => {
+    installFakeGlobals({});
+    let captured = null;
+    c_dbProxyClient.fn_isConnected = () => true;
+    c_dbProxyClient.fn_sendRequest = (mt, ms) => {
+        captured = { mt, ms };
+        return Promise.resolve({ success: true, ms: { tasks: [{ taskId: 't1', data: { a: 1 }, messageType: 1024 }] } });
+    };
+
+    const ws = makeFakeWs({ name: 'unit1' });
+    c_tasks.fn_handleLoadTasks({ ms: { ai: 'acc@x.com', mt: 1024 } }, ws);
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.ok(captured, 'request was forwarded to storage server');
+    assert.strictEqual(captured.mt, c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadTasks);
+    assert.strictEqual(captured.ms.unitId, 'acc@x.com');
+
+    assert.strictEqual(ws.sent.length, 1);
+    const reply = JSON.parse(ws.sent[0]);
+    assert.strictEqual(reply.mt, 1024);
+    assert.deepStrictEqual(reply.ms, { a: 1 });
+    assert.strictEqual(reply.sid, 't1');
+});
+
+test('fn_handleSaveTasks replies with storage-not-connected error when DB proxy is offline', () => {
     installFakeGlobals({});
     const ws = makeFakeWs({ name: 'unit1' });
     c_tasks.fn_handleSaveTasks({ ms: { ai: 'acc@x.com' } }, ws);
-    assert.strictEqual(ws.sent.length, 0);
+    assert.strictEqual(ws.sent.length, 1);
+    const reply = JSON.parse(ws.sent[0]);
+    assert.strictEqual(reply.mt, c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveTasks);
+    assert.ok(reply.ms.includes('Storage server not connected'));
 });
 
-test('fn_handleDeleteTasks returns without replying when tasks backend is not initialized', () => {
+test('fn_handleDeleteTasks replies with storage-not-connected error when DB proxy is offline', () => {
     installFakeGlobals({});
     const ws = makeFakeWs({ name: 'unit1' });
     c_tasks.fn_handleDeleteTasks({ ms: { ai: 'acc@x.com' } }, ws);
-    assert.strictEqual(ws.sent.length, 0);
+    assert.strictEqual(ws.sent.length, 1);
+    const reply = JSON.parse(ws.sent[0]);
+    assert.strictEqual(reply.mt, c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteTasks);
+    assert.ok(reply.ms.includes('Storage server not connected'));
 });
 
 test('task handlers ignore requests with a missing/empty accountID (ai)', () => {
@@ -162,12 +200,12 @@ test('task handlers ignore requests with a missing/empty accountID (ai)', () => 
     assert.strictEqual(ws.sent.length, 0);
 });
 
-// Characterization test: documents a PRE-EXISTING behavior preserved by the split.
-// fn_handleDisableTasks lacks the `v_andruavTasks == null` guard that the other
-// handlers have, so with a valid accountID but no backend it throws.
-// Phase 2 (DI/async refactor) should add the guard and replace this assertion.
-test('[characterization] fn_handleDisableTasks throws when ai present but backend uninitialized', () => {
+test('fn_handleDisableTasks replies with storage-not-connected error when DB proxy is offline', () => {
     installFakeGlobals({});
     const ws = makeFakeWs({ name: 'unit1' });
-    assert.throws(() => c_tasks.fn_handleDisableTasks({ ms: { ai: 'acc@x.com' } }, ws));
+    c_tasks.fn_handleDisableTasks({ ms: { ai: 'acc@x.com' } }, ws);
+    assert.strictEqual(ws.sent.length, 1);
+    const reply = JSON.parse(ws.sent[0]);
+    assert.strictEqual(reply.mt, c_CONSTANTS.CONST_TYPE_AndruavSystem_DisableTasks);
+    assert.ok(reply.ms.includes('Storage server not connected'));
 });
