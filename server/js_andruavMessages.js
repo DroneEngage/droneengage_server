@@ -79,6 +79,8 @@ const AndruavMessageTypes = {
     CONST_TYPE_AndruavSystem_DisableTasks: 9004,
     CONST_TYPE_AndruavSystem_LogoutCommServer: 9006,
     CONST_TYPE_AndruavSystem_ConnectedCommServer: 9007,
+    CONST_TYPE_AndruavSystem_UdpProxy: 9008,
+    CONST_TYPE_AndruavSystem_UnitOnline: 9009,
 };
 
 

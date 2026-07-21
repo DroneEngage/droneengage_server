@@ -5,6 +5,7 @@ var m_agent_chat_server;
 const c_ChatAccountRooms = require("./chat_server/js_andruav_chat_account_rooms");
 const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
+const c_dbProxyClient = require("./server_to_server/js_db_proxy_client.js");
 const v_version = require('../package.json').version;
 
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
@@ -253,6 +254,17 @@ function fn_startServer() {
     
         m_commServerManagerClient.fn_startServer();
     }
+    
+    // Initialize DBProxyClient to connect to storage server
+    c_dbProxyClient.fn_initialize();
+    
+    // Set callback for DBProxyClient to send storage status to AUTH
+    if (global.m_serverconfig.m_configuration.ignore_auth_server !== true) {
+        c_dbProxyClient.fn_setSendToAuthCallback((p_message) => {
+            m_commServerManagerClient.fn_sendMessage(p_message);
+        });
+    }
+    
     m_agent_chat_server = global.m_chat_server_singelton_get_instance();
     m_agent_chat_server.fn_startServer();
 

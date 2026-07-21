@@ -19,6 +19,7 @@ exports.CONST_PERMISSION2                   = 'prm';   // verified
 exports.CONST_CS_CMD_INFO                       = 'a';
 exports.CONST_CS_CMD_LOGIN_REQUEST              = 'b';
 exports.CONST_CS_CMD_LOGOUT_REQUEST             = 'c';
+exports.CONST_CS_CMD_STORAGE_STATUS             = 'd';   // CommServer -> AUTH: storage server connection status
 
 exports.CONST_CS_ACCOUNT_ID                     = 'a';
 exports.CONST_CS_GROUP_ID                       = 'b';
@@ -67,6 +68,7 @@ exports.CONST_TYPE_AndruavSystem_Ping                   = 9005;
 exports.CONST_TYPE_AndruavSystem_LogoutCommServer       = 9006;
 exports.CONST_TYPE_AndruavSystem_ConnectedCommServer    = 9007;
 exports.CONST_TYPE_AndruavSystem_UdpProxy               = 9008;
+exports.CONST_TYPE_AndruavSystem_UnitOnline             = 9009; // CommServer -> StorageServer: unit reconnected, flush offline queue
 
 // Validation
 exports.CONST_ACCESSCODE_MAX_LENGTH = 200;

@@ -243,6 +243,9 @@ Account.prototype.fn_add_member_to_AccountGroup = function (p_unitname, p_groupn
  ***/
 Account.prototype.fn_del_member_fromAccountByName = function (p_unitname, terminateSocket) {
     this.forEach(group => group.fn_deleteMemberByName(p_unitname, terminateSocket));
+    if (Object.keys(this.m_groups).length === 0) {
+        delete c_accounts[this.m_accountID];
+    }
 }
 
 Account.prototype.forEach = function (callback) {
@@ -302,6 +305,9 @@ Group.prototype.fn_deleteMemberByName = function (p_unitname, terminateSocket) {
             const oldSocket = this.m_units[p_unitname];
             delete this.m_units[p_unitname];
             delete oldSocket.m__group;
+            if (Object.keys(this.m_units).length === 0) {
+                delete this.m_parentAccount.m_groups[this.m_ID];
+            }
             if (terminateSocket) {
                 console.log(`deleteMemberByName: terminateSocket ${p_unitname}`);
                 oldSocket.m__terminated = true;
