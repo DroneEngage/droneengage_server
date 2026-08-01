@@ -199,11 +199,6 @@ function fn_connectInternal() {
     m_ws.on('message', fn_onMessage);
     m_ws.on('close', fn_onClose);
     m_ws.on('error', fn_onError);
-    m_ws.on('ping', () => {
-        if (m_ws != null && m_ws.readyState === m_ws.OPEN) {
-            try { m_ws.pong(); } catch (ex) { /* ignore */ }
-        }
-    });
 }
 
 /**
