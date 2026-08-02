@@ -69,6 +69,8 @@ exports.CONST_TYPE_AndruavSystem_LogoutCommServer       = 9006;
 exports.CONST_TYPE_AndruavSystem_ConnectedCommServer    = 9007;
 exports.CONST_TYPE_AndruavSystem_UdpProxy               = 9008;
 exports.CONST_TYPE_AndruavSystem_UnitOnline             = 9009; // CommServer -> StorageServer: unit reconnected, flush offline queue
+exports.CONST_TYPE_AndruavSystem_LoadMission           = 9010; // Client -> CommServer -> StorageServer: load mission
+exports.CONST_TYPE_AndruavSystem_SaveMission           = 9011; // Client -> CommServer -> StorageServer: save mission
 
 // Validation
 exports.CONST_ACCESSCODE_MAX_LENGTH = 200;

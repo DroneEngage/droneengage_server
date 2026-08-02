@@ -343,12 +343,157 @@ function fn_handleDisableTasks(v_jmsg, p_ws) {
 }
 
 
+function fn_handleLoadMission(v_jmsg, p_ws) {
+    c_dumpError.fn_dumpdebug("load mission command");
+    const mms = fn_parseMessageBody(v_jmsg);
+
+    if ((mms.unitId == null) || (mms.unitId.length == 0)) {
+        return;
+    }
+    // Use account ID from login request for scoping - prevents cross-account access
+    const c_accountId = p_ws.m_loginRequest ? p_ws.m_loginRequest.m_accountID : null;
+    if (c_accountId == null) {
+        c_dumpError.fn_dumperror("load mission: missing accountID");
+        return;
+    }
+    c_dumpError.fn_dumpdebug(mms);
+
+    if (c_dbProxyClient.fn_isConnected()) {
+        c_dbProxyClient.fn_loadMission(mms.unitId, c_accountId, mms.missionId)
+            .then(function (p_response) {
+                if ((p_response.success !== true) || (p_response.ms == null)) return;
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadMission;
+                v_jmsg.ms = p_response.ms;
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadMission;
+                v_jmsg.ms = "Error: Failed to load mission from storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadMission;
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+}
+
+
+function fn_handleSaveMission(v_jmsg, p_ws) {
+    c_dumpError.fn_dumpdebug("save mission command");
+    const mms = fn_parseMessageBody(v_jmsg);
+
+    if ((mms.unitId == null) || (mms.unitId.length == 0)) {
+        return;
+    }
+    // Use account ID from login request for scoping - prevents cross-account access
+    const c_accountId = p_ws.m_loginRequest ? p_ws.m_loginRequest.m_accountID : null;
+    if (c_accountId == null) {
+        c_dumpError.fn_dumperror("save mission: missing accountID");
+        return;
+    }
+    c_dumpError.fn_dumpdebug(mms);
+
+    if (c_dbProxyClient.fn_isConnected()) {
+        c_dbProxyClient.fn_saveMission(mms.unitId, c_accountId, mms.missionId, mms.name, mms.data)
+            .then(function (p_response) {
+                if (p_response.success !== true) return;
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveMission;
+                v_jmsg.ms = "Done";
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveMission;
+                v_jmsg.ms = "Error: Failed to save mission to storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveMission;
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+}
+
+
+function fn_handleDeleteMission(v_jmsg, p_ws) {
+    c_dumpError.fn_dumpdebug("delete mission command");
+    const mms = fn_parseMessageBody(v_jmsg);
+
+    if (mms.missionId == null) {
+        return;
+    }
+    const c_accountId = p_ws.m_loginRequest ? p_ws.m_loginRequest.m_accountID : null;
+    if (c_accountId == null) {
+        c_dumpError.fn_dumperror("delete mission: missing accountID");
+        return;
+    }
+    c_dumpError.fn_dumpdebug(mms);
+
+    if (c_dbProxyClient.fn_isConnected()) {
+        c_dbProxyClient.fn_deleteMission(mms.missionId, c_accountId)
+            .then(function (p_response) {
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteMission;
+                v_jmsg.ms = "Done";
+                p_ws.send(JSON.stringify(v_jmsg));
+            })
+            .catch(function (err) {
+                c_dumpError.fn_dumperror(err);
+                v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+                v_jmsg.tg = p_ws.name;
+                v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+                v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteMission;
+                v_jmsg.ms = "Error: Failed to delete mission from storage server";
+                p_ws.send(JSON.stringify(v_jmsg));
+            });
+        return;
+    }
+
+    const c_connectionState = c_dbProxyClient.fn_getConnectionState();
+    v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
+    v_jmsg.tg = p_ws.name;
+    v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+    v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteMission;
+    v_jmsg.ms = `Error: Storage server not connected (state: ${c_connectionState})`;
+    p_ws.send(JSON.stringify(v_jmsg));
+}
+
+
 module.exports = {
     fn_initTasks,
     fn_handleLoadTasks,
     fn_handleSaveTasks,
     fn_handleDeleteTasks,
     fn_handleDisableTasks,
+    fn_handleLoadMission,
+    fn_handleSaveMission,
+    fn_handleDeleteMission,
     // Exported for unit testing of the de-duplicated helpers.
     fn_parseMessageBody,
     fn_fillTaskParams,
