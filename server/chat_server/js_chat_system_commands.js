@@ -99,6 +99,18 @@ function onSystemMessage(v_jmsg, p_ws) {
                 c_tasks.fn_handleDisableTasks(v_jmsg, p_ws);
                 break;
 
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadMission:
+                c_tasks.fn_handleLoadMission(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveMission:
+                c_tasks.fn_handleSaveMission(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteMission:
+                c_tasks.fn_handleDeleteMission(v_jmsg, p_ws);
+                break;
+
         }
     }
     catch (e) {

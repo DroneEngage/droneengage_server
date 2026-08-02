@@ -73,6 +73,9 @@ const AndruavMessageTypes = {
     CONST_TYPE_AndruavBinaryMessage_Mavlink: 6502,
 
     // System Messages
+    CONST_TYPE_AndruavSystem_LoadMission: 9010,
+    CONST_TYPE_AndruavSystem_SaveMission: 9011,
+    CONST_TYPE_AndruavSystem_DeleteMission: 9012,
     CONST_TYPE_AndruavSystem_LoadTasks: 9001,
     CONST_TYPE_AndruavSystem_SaveTasks: 9002,
     CONST_TYPE_AndruavSystem_DeleteTasks: 9003,
