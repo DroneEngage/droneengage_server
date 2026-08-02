@@ -351,11 +351,69 @@ function fn_sendRequest(p_mt, p_ms) {
     });
 }
 
+/**
+ * Load mission from storage server.
+ * @param {string} p_unitId - Unit ID
+ * @param {string} p_accountId - Account ID (team ID) for scoping
+ * @param {string} p_missionId - Optional mission ID (if null, loads all missions for unit)
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_loadMission(p_unitId, p_accountId, p_missionId = null) {
+    const c_CONST_TYPE_AndruavSystem_LoadMission = 9010;
+    const payload = {
+        unitId: p_unitId,
+        accountId: p_accountId
+    };
+    if (p_missionId) {
+        payload.missionId = p_missionId;
+    }
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_LoadMission, payload);
+}
+
+/**
+ * Save mission to storage server.
+ * @param {string} p_unitId - Unit ID
+ * @param {string} p_accountId - Account ID (team ID) for scoping
+ * @param {string} p_missionId - Mission ID
+ * @param {string} p_name - Mission name
+ * @param {object} p_data - Mission data (DE format JSON)
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_saveMission(p_unitId, p_accountId, p_missionId, p_name, p_data) {
+    const c_CONST_TYPE_AndruavSystem_SaveMission = 9011;
+    const payload = {
+        unitId: p_unitId,
+        accountId: p_accountId,
+        missionId: p_missionId,
+        name: p_name,
+        data: p_data
+    };
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_SaveMission, payload);
+}
+
+/**
+ * Delete mission from storage server.
+ * @param {string} p_missionId - Mission ID
+ * @param {string} p_accountId - Account ID (team ID) for scoping
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_deleteMission(p_missionId, p_accountId) {
+    const c_CONST_TYPE_AndruavSystem_DeleteMission = 9012;
+    const payload = {
+        missionId: p_missionId,
+        accountId: p_accountId
+    };
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_DeleteMission, payload);
+}
+
 module.exports = {
     fn_initialize,
     fn_connect,
     fn_isConnected,
     fn_getConnectionState,
     fn_sendRequest,
-    fn_setSendToAuthCallback
+    fn_setSendToAuthCallback,
+    fn_loadMission,
+    fn_saveMission,
+    fn_deleteMission
 };
