@@ -28,12 +28,12 @@ const CONST_HEARTBEAT_INTERVAL_MS = 30000; // 30 seconds
 const CONST_MAX_RECONNECT_DELAY_MS = 60000; // Max 60 seconds
 const CONST_INITIAL_RECONNECT_DELAY_MS = 1000; // Start with 1 second
 
-// Connection states
+// Connection states (short codes from js_constants.js)
 const CONST_CONNECTION_STATE = {
-    DISCONNECTED: 'disconnected',
-    CONNECTING: 'connecting',
-    CONNECTED: 'connected',
-    UNHEALTHY: 'unhealthy'
+    DISCONNECTED: c_CONSTANTS.CONST_STORAGE_STATE_DISCONNECTED,
+    CONNECTING:   c_CONSTANTS.CONST_STORAGE_STATE_CONNECTING,
+    CONNECTED:    c_CONSTANTS.CONST_STORAGE_STATE_CONNECTED,
+    UNHEALTHY:    c_CONSTANTS.CONST_STORAGE_STATE_UNHEALTHY
 };
 
 let m_ws = null;
@@ -61,7 +61,7 @@ function fn_onOpen() {
     console.log(`${global.Colors.BSuccess}[OK] DBProxyClient connected to storage server${global.Colors.Reset}`);
     m_reconnectAttempts = 0; // Reset reconnect attempts on successful connection
     m_connectionState = CONST_CONNECTION_STATE.CONNECTING;
-    fn_sendStorageStatus('connecting');
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTING);
 
     // If storage server doesn't send S2S challenge within 2 seconds, assume no auth required
     if (m_s2sAuthTimer) {
@@ -72,7 +72,7 @@ function fn_onOpen() {
             console.log(`${global.Colors.FgYellow}[INFO] DBProxyClient: No S2S challenge received, assuming no auth required${global.Colors.Reset}`);
             m_authenticated = true;
             m_connectionState = CONST_CONNECTION_STATE.CONNECTED;
-            fn_sendStorageStatus('connected');
+            fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED);
             fn_startHeartbeat();
         }
     }, 2000);
@@ -116,7 +116,7 @@ function fn_onMessage(data) {
         m_authenticated = true;
         m_connectionState = CONST_CONNECTION_STATE.CONNECTED;
         console.log(`${global.Colors.BSuccess}[OK] DBProxyClient authenticated with storage server${global.Colors.Reset}`);
-        fn_sendStorageStatus('connected');
+        fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED);
         fn_startHeartbeat();
         return;
     }
@@ -141,7 +141,7 @@ function fn_onClose() {
     m_ws = null;
     m_connectionState = CONST_CONNECTION_STATE.DISCONNECTED;
     fn_stopHeartbeat();
-    fn_sendStorageStatus('disconnected', 'Connection closed');
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.DISCONNECTED, 'Connection closed');
     fn_clearPending(new Error('DBProxyClient disconnected'));
 
     // Clear S2S auth timer
@@ -168,7 +168,7 @@ function fn_onClose() {
 function fn_onError(err) {
     console.error(`${global.Colors.Error}DBProxyClient WebSocket error: ${err}${global.Colors.Reset}`);
     m_connectionState = CONST_CONNECTION_STATE.UNHEALTHY;
-    fn_sendStorageStatus('error', err.message);
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.ERROR, err.message);
     // Close the socket to trigger reconnect logic
     if (m_ws != null) {
         try { m_ws.close(); } catch (ex) { /* ignore */ }
@@ -269,7 +269,7 @@ function fn_startHeartbeat() {
     }
 
     m_heartbeatTimer = setInterval(() => {
-        const c_status = m_authenticated ? 'connected' : 'disconnected';
+        const c_status = m_authenticated ? CONST_CONNECTION_STATE.CONNECTED : CONST_CONNECTION_STATE.DISCONNECTED;
         fn_sendStorageStatus(c_status);
     }, CONST_HEARTBEAT_INTERVAL_MS);
 }

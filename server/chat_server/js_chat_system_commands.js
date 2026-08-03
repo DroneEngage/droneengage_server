@@ -13,6 +13,7 @@ const udp = require('../js_udp_proxy.js');
 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
 const c_tasks = require("./js_chat_tasks.js");
+const c_queryServer = require("./js_chat_query_server.js");
 
 
 function onSystemMessage(v_jmsg, p_ws) {
@@ -109,6 +110,10 @@ function onSystemMessage(v_jmsg, p_ws) {
 
             case c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteMission:
                 c_tasks.fn_handleDeleteMission(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_QueryServer:
+                c_queryServer.fn_handleQueryServer(v_jmsg, p_ws);
                 break;
 
         }
