@@ -76,6 +76,8 @@ const AndruavMessageTypes = {
     CONST_TYPE_AndruavSystem_LoadMission: 9010,
     CONST_TYPE_AndruavSystem_SaveMission: 9011,
     CONST_TYPE_AndruavSystem_DeleteMission: 9012,
+    CONST_TYPE_AndruavSystem_QueryServer: 9013,
+    CONST_TYPE_AndruavSystem_StateServer: 9014,
     CONST_TYPE_AndruavSystem_LoadTasks: 9001,
     CONST_TYPE_AndruavSystem_SaveTasks: 9002,
     CONST_TYPE_AndruavSystem_DeleteTasks: 9003,

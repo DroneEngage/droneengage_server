@@ -69,8 +69,21 @@ exports.CONST_TYPE_AndruavSystem_LogoutCommServer       = 9006;
 exports.CONST_TYPE_AndruavSystem_ConnectedCommServer    = 9007;
 exports.CONST_TYPE_AndruavSystem_UdpProxy               = 9008;
 exports.CONST_TYPE_AndruavSystem_UnitOnline             = 9009; // CommServer -> StorageServer: unit reconnected, flush offline queue
-exports.CONST_TYPE_AndruavSystem_LoadMission           = 9010; // Client -> CommServer -> StorageServer: load mission
-exports.CONST_TYPE_AndruavSystem_SaveMission           = 9011; // Client -> CommServer -> StorageServer: save mission
+exports.CONST_TYPE_AndruavSystem_LoadMission            = 9010; // Client -> CommServer -> StorageServer: load mission
+exports.CONST_TYPE_AndruavSystem_SaveMission            = 9011; // Client -> CommServer -> StorageServer: save mission
+exports.CONST_TYPE_AndruavSystem_DeleteMission          = 9012;
+exports.CONST_TYPE_AndruavSystem_QueryServer            = 9013;
+exports.CONST_TYPE_AndruavSystem_StateServer            = 9014;
+
+// Subcommands for CONST_TYPE_AndruavSystem_QueryServer / StateServer
+exports.CONST_TYPE_AndruavSystem_QueryServer_SubCmd_Is_Storage_Server_Connected = 1;
+
+// Storage/DB connection state codes (short strings to minimize message size)
+exports.CONST_STORAGE_STATE_DISCONNECTED = 'dc';
+exports.CONST_STORAGE_STATE_CONNECTING   = 'cg';
+exports.CONST_STORAGE_STATE_CONNECTED    = 'cd';
+exports.CONST_STORAGE_STATE_UNHEALTHY    = 'uh';
+exports.CONST_STORAGE_STATE_ERROR        = 'er';
 
 // Validation
 exports.CONST_ACCESSCODE_MAX_LENGTH = 200;
