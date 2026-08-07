@@ -330,10 +330,10 @@ function fn_startChatServer() {
 
     // Start HTTPS server
     wserver.listen(
-        global.m_serverconfig.m_configuration.server_port,
+        process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port,
         global.m_serverconfig.m_configuration.server_ip,
         () => {
-            console.log(`HTTPS server started on ${global.m_serverconfig.m_configuration.server_ip}:${global.m_serverconfig.m_configuration.server_port}`);
+            console.log(`HTTPS server started on ${global.m_serverconfig.m_configuration.server_ip}:${process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port}`);
         }
     );
 
