@@ -124,7 +124,7 @@ function fn_generateLoginRequestReply(p_cmd) {
     c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
     c_reply.d[c_CONSTANTS.CONST_CS_ERROR.toString()] = c_CONSTANTS.CONST_ERROR_NON;
     c_reply.d[c_CONSTANTS.CONST_CS_SERVER_PUBLIC_HOST.toString()] = global.m_serverconfig.m_configuration.public_host;
-    c_reply.d[c_CONSTANTS.CONST_CS_SERVER_PORT.toString()] = global.m_serverconfig.m_configuration.server_port;
+    c_reply.d[c_CONSTANTS.CONST_CS_SERVER_PORT.toString()] = process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port;
     c_reply.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()];
 
     return c_reply;
@@ -208,7 +208,7 @@ function fn_updateServerWatchdog() {
             'version': v_version,
             'serverId': global.m_serverconfig.m_configuration.server_id,
             'public_host': global.m_serverconfig.m_configuration.public_host, // this is the ip that is listening to the connections.
-            'serverPort': global.m_serverconfig.m_configuration.server_port,
+            'serverPort': process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port,
             // this is why we send this message with every connection.
             // it is crucial to Auth server to know the exact unique list of keys
             // so that it can rout correctly in case of multiple communication_servers
