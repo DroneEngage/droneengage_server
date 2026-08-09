@@ -17,7 +17,7 @@
  *   s2s_trusted_server_keys: object       - mapping of server_id to public key file paths (when ACCEPTING peers).
  *                                   Example: { "child1": "./ssl/child1_public.pem", "child2": "./ssl/child2_public.pem" }
  *
- * Key file paths are resolved relative to the project root (one level up from server/ directory).
+ * Key file paths are resolved relative to the project root (one level up from comm_server/ directory).
  */
 
 const c_crypto = require('crypto');
@@ -34,7 +34,7 @@ let m_publicKeys = null;
 
 function fn_resolvePath(p_path) {
     // Resolve relative to project root, not this module's directory
-    const c_projectRoot = c_path.resolve(__dirname, '..');
+    const c_projectRoot = c_path.resolve(__dirname, '..', '..');
     return c_path.resolve(c_projectRoot, p_path);
 }
 

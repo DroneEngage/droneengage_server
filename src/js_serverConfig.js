@@ -38,7 +38,7 @@ exports.init = function init (p_configFileName)
 		
     try
     {
-        var v_filestring = fs.readFileSync(path.join(__dirname,m_configFileName)).toString();			
+        var v_filestring = fs.readFileSync(path.join(__dirname, '..', m_configFileName)).toString();	
     }
     catch (err)
     {

@@ -1,6 +1,6 @@
 "use strict";
 
-var v_config = require('../config/config');
+var v_config = require('../../config/config');
 
 
 module.exports.fn_getHeaderParams = function (p_url)
