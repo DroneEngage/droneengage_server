@@ -4,4 +4,4 @@
 ROOTDIR=$PWD
 
 
-node server.js  --config=server.s2s.super.config
+node src/server.js  --config=server.s2s.super.config

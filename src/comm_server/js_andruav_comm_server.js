@@ -6,7 +6,7 @@ const c_ChatAccountRooms = require("./chat_server/js_andruav_chat_account_rooms"
 const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
 const c_dbProxyClient = require("./server_to_server/js_db_proxy_client.js");
-const v_version = require('../package.json').version;
+const v_version = require('../../package.json').version;
 
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
 

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Unit tests for server/chat_server/js_chat_tasks.js
+ * Unit tests for comm_server/chat_server/js_chat_tasks.js
  *
  * Focus is the de-duplicated helpers that replaced the four near-identical
  * task command blocks, plus the early-return guards of the handlers.
@@ -15,10 +15,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { installFakeGlobals, restoreGlobals, makeFakeWs } = require('../helpers/test_globals.js');
-const c_CONSTANTS = require('../../js_constants.js');
+const c_CONSTANTS = require('../../src/js_constants.js');
 
-const c_tasks = require('../../server/chat_server/js_chat_tasks.js');
-const c_dbProxyClient = require('../../server/server_to_server/js_db_proxy_client.js');
+const c_tasks = require('../../src/comm_server/chat_server/js_chat_tasks.js');
+const c_dbProxyClient = require('../../src/comm_server/server_to_server/js_db_proxy_client.js');
 
 
 test.afterEach(() => {
