@@ -28,9 +28,9 @@ This document describes the message routing and propagation logic in the server-
 
 | File | Role |
 |------|------|
-| `server/chat_server/js_andruav_chat_server.js` | Main message routing logic |
-| `server/server_to_server/js_parent_comm_server.js` | Super server - accepts child connections |
-| `server/server_to_server/js_child_comm_server.js` | Child server - connects to parent |
+| `src/comm_server/chat_server/js_andruav_chat_server.js` | Main message routing logic |
+| `src/comm_server/server_to_server/js_parent_comm_server.js` | Super server - accepts child connections |
+| `src/comm_server/server_to_server/js_child_comm_server.js` | Child server - connects to parent |
 
 ### Core Functions
 

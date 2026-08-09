@@ -35,7 +35,7 @@ exports.fn_init = function fn_init (configFileName)
 		
         try
         {
-        var filestring = c_fs.readFileSync(c_path.join(__dirname,v_configFileName)).toString();			
+        var filestring = c_fs.readFileSync(c_path.join(__dirname, '..', '..', v_configFileName)).toString();	
         }
         catch (err)
         {

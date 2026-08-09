@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Unit tests for server/js_s2s_auth.js
+ * Unit tests for comm_server/js_s2s_auth.js
  *
  * Tests the Ed25519 challenge-response authentication helper.
  * Focuses on envelope building/parsing, signing, and verification logic.
@@ -15,7 +15,7 @@ const os = require('os');
 const path = require('path');
 
 const { installFakeGlobals, restoreGlobals } = require('../helpers/test_globals.js');
-const c_s2s_auth = require('../../server/js_s2s_auth.js');
+const c_s2s_auth = require('../../src/comm_server/js_s2s_auth.js');
 
 let g_tempDir = null;
 

@@ -3,7 +3,7 @@ downloads/
 node_modules/
 package-lock.json
 
-/server/ssl/*
+/src/comm_server/ssl/*
 log/
 *.log
 *.heapsnapshot

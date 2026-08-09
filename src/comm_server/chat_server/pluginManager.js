@@ -6,7 +6,7 @@ function fn_initPlugins() {
     if (global.m_serverconfig.m_configuration?.command_plugin) {
         global.m_serverconfig.m_configuration.command_plugin.forEach((pluginPath) => {
             try {
-                const baseDir = path.join(__dirname, '../..');
+                const baseDir = path.join(__dirname, '../../..');
                 const resolvedPath = path.resolve(baseDir, pluginPath);
                 const processor = require(resolvedPath);
 
