@@ -14,7 +14,7 @@
     "email": "rcmobilestuff@gmail.com"
   },
   "scripts": {
-    "start": "node ./server.js",
+    "start": "node ./src/server.js",
     "build": "node scripts/build.js",
     "test": "node --test \"test/unit/**/*.test.js\"",
     "test:watch": "node --test --watch \"test/unit/**/*.test.js\""
@@ -23,7 +23,7 @@
     "node": ">=18"
   },
   "bin": {
-    "andruavmainserver": "server.js"
+    "andruavmainserver": "src/server.js"
   },
   "dependencies": {
     "ejs": "^3.1.9",

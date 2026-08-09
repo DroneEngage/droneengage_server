@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Unit tests for server/chat_server/js_chat_relay.js
+ * Unit tests for comm_server/chat_server/js_chat_relay.js
  *
  * Covers the server-to-server mesh forwarding logic:
  *  - origin id resolution
@@ -22,7 +22,7 @@ const {
     parseHeader
 } = require('../helpers/test_globals.js');
 
-const c_relay = require('../../server/chat_server/js_chat_relay.js');
+const c_relay = require('../../src/comm_server/chat_server/js_chat_relay.js');
 
 
 test.afterEach(() => restoreGlobals());
