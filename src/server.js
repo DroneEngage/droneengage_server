@@ -60,7 +60,11 @@ function fn_displayInfo ()
     console.log (global.Colors.Bright + "DE Communication Server version " +  JSON.stringify(v_pjson.version) + global.Colors.Reset);
     console.log ("---------------------------------------------");
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
-    console.log("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + (process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port) + global.Colors.Reset);
+    console.log("Listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + (process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port) + global.Colors.Reset);
+    if (global.m_serverconfig.m_configuration.public_host != null)
+    {
+        console.log("Accessed as Public Host: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.public_host + global.Colors.Reset);
+    }
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
     if (global.m_serverconfig.m_configuration.ignoreLog!==false)
     {
