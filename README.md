@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DroneEngage/droneengage_server)
+
 # Andruav Server
 
 Andruav Server is the communication server responsible for exchanging messages between different units and GCSs running [Andruav or Drone-Engage](https://cloud.ardupilot.org).
