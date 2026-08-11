@@ -1,0 +1,10 @@
+# Ignore dependencies generated inside each plugin subfolder
+**/node_modules/
+**/package-lock.json
+
+# Ignore all plugin subfolders (each plugin manages its own repo/deps)
+*/
+# But keep this .gitignore and other top-level files tracked
+!.gitignore
+!.gitkeep
+!TODO.txt
