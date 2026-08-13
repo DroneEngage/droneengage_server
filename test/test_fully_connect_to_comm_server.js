@@ -148,7 +148,6 @@ const postData = JSON.stringify({
     pwd: "mhefny",
     gr: "1",
     app: 'andruav',
-    ver: "5.0.0.1",
     ex: 'Andruav',
     at: "g",
 });

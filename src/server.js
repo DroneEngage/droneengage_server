@@ -1,6 +1,6 @@
 "use strict";
 
-const v_pjson           = require('./package.json');
+const v_pjson           = require('../package.json');
 const hlp_string        = require('./helpers/hlp_strings.js');
 global.Colors           = require ("./helpers/js_colors.js").Colors;
 global.m_serverconfig   = require ('./js_serverConfig.js'); 
@@ -11,10 +11,10 @@ let v_configFileName = global.m_serverconfig.getFileName();
 
 
 
-const m_andruav_comm_server = require ('./server/js_andruav_comm_server.js')
-const m_udp_proxy = require('./server/js_udp_proxy.js');
-global.m_andruav_channel_parent_server = require ('./server/server_to_server/js_parent_comm_server.js');
-global.m_andruav_channel_child_socket = require ('./server/server_to_server/js_child_comm_server.js');
+const m_andruav_comm_server = require ('./comm_server/js_andruav_comm_server.js')
+const m_udp_proxy = require('./comm_server/js_udp_proxy.js');
+global.m_andruav_channel_parent_server = require ('./comm_server/server_to_server/js_parent_comm_server.js');
+global.m_andruav_channel_child_socket = require ('./comm_server/server_to_server/js_child_comm_server.js');
 
 
 process.on('SIGINT', function() {
@@ -60,7 +60,11 @@ function fn_displayInfo ()
     console.log (global.Colors.Bright + "DE Communication Server version " +  JSON.stringify(v_pjson.version) + global.Colors.Reset);
     console.log ("---------------------------------------------");
     console.log ("Server Name  " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_id + global.Colors.Reset);
-    console.log("listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + (process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port) + global.Colors.Reset);
+    console.log("Listening on ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.server_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + (process.env.de_comm_server_port || global.m_serverconfig.m_configuration.server_port) + global.Colors.Reset);
+    if (global.m_serverconfig.m_configuration.public_host != null)
+    {
+        console.log("Accessed as Public Host: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.public_host + global.Colors.Reset);
+    }
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
     if (global.m_serverconfig.m_configuration.ignoreLog!==false)
     {
@@ -141,7 +145,7 @@ function fn_initSingletons()
     {
         if (global.m_chat_server_singelton_instance === undefined)
         {
-            global.m_chat_server_singelton_instance = require ('./server/chat_server/js_andruav_chat_server.js');
+            global.m_chat_server_singelton_instance = require ('./comm_server/chat_server/js_andruav_chat_server.js');
         }
         
         return global.m_chat_server_singelton_instance;

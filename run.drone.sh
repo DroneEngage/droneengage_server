@@ -4,4 +4,4 @@
 ROOTDIR=$PWD
 
 
-node server.js  --config=server.s2s.drone.config
+node src/server.js  --config=server.s2s.drone.config

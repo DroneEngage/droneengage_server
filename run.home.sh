@@ -4,6 +4,6 @@
 ROOTDIR=$PWD
 
 
-node server.js  --config=server.home.config
+node src/server.js  --config=server.home.config
 
 
