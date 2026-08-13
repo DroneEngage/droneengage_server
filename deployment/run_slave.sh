@@ -4,4 +4,4 @@
 ROOTDIR=$PWD
 
 cd /home/mhefny/TDisk/public_versions/andruav/andruav_server
-node server.js --config=deployment/server.s2s.drone.config
+node src/server.js --config=deployment/server.s2s.drone.config

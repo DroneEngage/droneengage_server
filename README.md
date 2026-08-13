@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/DroneEngage/droneengage_server)
+
 # Andruav Server
 
 Andruav Server is the communication server responsible for exchanging messages between different units and GCSs running [Andruav or Drone-Engage](https://cloud.ardupilot.org).
@@ -266,18 +268,24 @@ Example configuration files are provided in the `deployment/` directory:
 
 ```
 droneengage_server/
-├── server/
-│   ├── chat_server/          # Message routing logic
-│   │   └── js_chat_tasks.js  # Task handlers with DBProxyClient integration
-│   └── server_to_server/     # S2S communication
-│       └── js_db_proxy_client.js  # Storage server client
-├── ssl_local/                # SSL certificates and S2S keys
-├── deployment/               # Deployment configurations
+├── src/
+│   ├── server.js              # Main entry point
+│   ├── js_constants.js        # Message types, routing constants
+│   ├── js_serverConfig.js     # Config loader
+│   ├── dumperror.js           # Error dump utility
+│   ├── helpers/               # Utility functions (args, strings, validation, colors)
+│   ├── plugins/               # Command plugins
+│   └── comm_server/
+│       ├── chat_server/       # Message routing logic
+│       │   └── js_chat_tasks.js  # Task handlers with DBProxyClient integration
+│       └── server_to_server/  # S2S communication
+│           └── js_db_proxy_client.js  # Storage server client
+├── ssl_local/                 # SSL certificates and S2S keys
+├── deployment/                # Deployment configurations
 ├── test/
-│   ├── unit/                 # Unit tests
-│   └── helpers/              # Test utilities
-├── wiki/                     # Documentation
-└── server.js                 # Main entry point
+│   ├── unit/                  # Unit tests
+│   └── helpers/               # Test utilities
+├── wiki/                      # Documentation
 ```
 
 ## Contributing

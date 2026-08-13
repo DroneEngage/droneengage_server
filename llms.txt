@@ -25,21 +25,21 @@ Core components:
 - **Chat System**: Message routing and room management
 
 ## Key Files
-- `server.js` - Main entry point, initializes all servers
+- `src/server.js` - Main entry point, initializes all servers
 - `server.config` - JSON configuration (supports --config override)
 - `package.json` - Dependencies and scripts
-- `server/js_andruav_comm_server.js` - Main WebSocket server
-- `server/chat_server/js_andruav_chat_server.js` - Chat system singleton
-- `server/chat_server/js_chat_routing.js` - Message routing logic
-- `server/chat_server/js_chat_connection.js` - Connection management
-- `server/chat_server/js_chat_relay.js` - S2S message relay
-- `server/server_to_server/js_parent_comm_server.js` - Parent server S2S
-- `server/server_to_server/js_child_comm_server.js` - Child server S2S
-- `server/js_s2s_auth.js` - Ed25519 S2S authentication
-- `server/js_udp_proxy.js` - UDP packet proxy
-- `server/js_andruavTasks_v2.js` - Task management
-- `js_constants.js` - Message types, routing constants
-- `helpers/` - Utility functions (args, strings, validation, colors)
+- `src/comm_server/js_andruav_comm_server.js` - Main WebSocket server
+- `src/comm_server/chat_server/js_andruav_chat_server.js` - Chat system singleton
+- `src/comm_server/chat_server/js_chat_routing.js` - Message routing logic
+- `src/comm_server/chat_server/js_chat_connection.js` - Connection management
+- `src/comm_server/chat_server/js_chat_relay.js` - S2S message relay
+- `src/comm_server/server_to_server/js_parent_comm_server.js` - Parent server S2S
+- `src/comm_server/server_to_server/js_child_comm_server.js` - Child server S2S
+- `src/comm_server/js_s2s_auth.js` - Ed25519 S2S authentication
+- `src/comm_server/js_udp_proxy.js` - UDP packet proxy
+- `src/comm_server/js_andruavTasks_v2.js` - Task management
+- `src/js_constants.js` - Message types, routing constants
+- `src/helpers/` - Utility functions (args, strings, validation, colors)
 
 ## Configuration
 Configuration is centralized in `server.config` (JSON format). Key sections:
@@ -58,7 +58,7 @@ Configuration is centralized in `server.config` (JSON format). Key sections:
 - Several modules attached to `global` for easy access
 - Memory monitoring with auto-restart on limit exceeded
 - Error handling: check `global.m_logger` existence before use
-- Reuse utilities in `helpers/` directory
+- Reuse utilities in `src/helpers/` directory
 
 ## Message Routing
 Messages routed based on `ty` (type) and `tg` (target) fields:
