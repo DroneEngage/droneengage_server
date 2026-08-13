@@ -129,6 +129,16 @@ function fn_onConnect_Handler(p_ws, p_req) {
 
     if (global.m_logger) global.m_logger.Info('WS Created from Party', 'fn_onConnect_Handler', null, c_params);
 
+    // Security item 2.1: when ws_auth_via_frame is true and the URL has no
+    // credentials, the client will send a de_auth JSON frame as the first
+    // message. We defer validation until that frame arrives.
+    const c_authViaFrame = global.m_serverconfig.m_configuration.ws_auth_via_frame === true;
+    const c_hasQueryCreds = c_params != null
+        && c_params.hasOwnProperty(c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString());
+    // If the flag is on but the client sent query creds anyway (backward
+    // compat with older clients), fall through to the normal path.
+    const c_deferAuthFrame = c_authViaFrame && !c_hasQueryCreds;
+
 
     /**
      * Make sure that connection has a key and in valid format and in the waiting list "m_waitingAccounts".
@@ -190,7 +200,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
         c_routing.fn_parseMessage(this, p_msg, v_isBinary);
         p_msg = null;
     }
-    
+
     function fn_onWsClose(p_code) {
         // this function can be called during key validation.
         // also this function is called when terminated a socket when a senderID kicks out an older unit with same senderID.
@@ -203,7 +213,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
         // remove from active senderIDs list and notify auth server.
         if (p_ws.m_loginRequest != null) {
             c_andruav_active_senders.deleteActiveSenderIDList(p_ws.m_loginRequest.m_senderID);
-            
+
             // Send logout notification to auth server
             const c_logout_msg = {
                 'c': c_CONSTANTS.CONST_CS_CMD_LOGOUT_REQUEST,
@@ -211,7 +221,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
             };
             c_logout_msg.d[c_CONSTANTS.CONST_CS_SENDER_ID.toString()] = p_ws.m_loginRequest.m_senderID;
             c_CommServerManagerClient.fn_sendMessage(JSON.stringify(c_logout_msg));
-            
+
             if (c_CommServerManagerClient.fn_updateAuthServer) {
                 c_CommServerManagerClient.fn_updateAuthServer();
             }
@@ -239,36 +249,161 @@ function fn_onConnect_Handler(p_ws, p_req) {
     p_ws.on('upgrade', fn_onWsUpgrade.bind(p_ws));
     p_ws.on('headers', fn_onWsHeaders.bind(p_ws));
 
-    if (global.m_serverconfig.m_configuration.local_server_enabled === true) {
-        // Local Server is enabled. No need to wait for AndruavAuth to connect.
-        // We assume the connection setup is straightforward and generate our local data.
-        fn_validateKeyLocal(c_params);
+    /**
+     * Security item 2.1: complete the connection after credentials have been
+     * obtained (either from the URL query string or from a de_auth frame).
+     * This is the shared tail of both the legacy and auth-frame paths.
+     */
+    function fn_completeConnection(c_params) {
+        if (global.m_serverconfig.m_configuration.local_server_enabled === true) {
+            // Local Server is enabled. No need to wait for AndruavAuth to connect.
+            // We assume the connection setup is straightforward and generate our local data.
+            fn_validateKeyLocal(c_params);
 
-        if (v_loginTempKey != null) {
-            // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
-            acceptLocalConnection(c_params, p_ws);
+            if (v_loginTempKey != null) {
+                // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
+                acceptLocalConnection(c_params, p_ws);
+            }
+            else {
+                //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
+                p_ws.m_loginRequest = null;
+                p_ws.close();
+            }
+
         }
         else {
-            //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
-            p_ws.m_loginRequest = null;
-            p_ws.close();
-        }
 
+            fn_validateKey(c_params);
+
+            if (v_loginTempKey != null) {
+                // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
+
+                acceptConnection(v_loginTempKey, c_params, p_ws);
+            }
+            else {
+                //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
+                p_ws.m_loginRequest = null;
+                p_ws.close();
+            }
+        }
+    }
+
+    /**
+     * Security item 2.1: send a de_auth_ack frame to the client.
+     * @param {boolean} ok - true for success, false for failure
+     * @param {string} [reason] - failure reason (only when ok=false)
+     */
+    function fn_sendAuthAck(ok, reason) {
+        const v_jmsg = {
+            ty: c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM,  // 's'
+            mt: 'de_auth_ack',
+            r: ok ? 'ok' : 'fail',
+        };
+        if (!ok && reason) {
+            v_jmsg.em = reason;
+        }
+        try {
+            p_ws.send(JSON.stringify(v_jmsg));
+        } catch (e) {
+            // socket may already be closed
+        }
+    }
+
+    if (c_deferAuthFrame === true) {
+        // Security item 2.1: no query-string credentials — wait for the
+        // de_auth frame as the first WS message. Install a one-time
+        // interceptor that parses the frame, extracts the params, and then
+        // runs the normal validation/accept flow.
+        p_ws.m_authPending = true;
+        let v_authTimer = null;
+
+        const fn_authFrameHandler = function (p_msg, v_isBinary) {
+            // Only the first message is intercepted; remove this handler
+            // immediately regardless of outcome.
+            p_ws.removeListener('message', fn_authFrameHandler);
+            if (v_authTimer) { clearTimeout(v_authTimer); v_authTimer = null; }
+
+            if (p_ws.m_authPending !== true) {
+                return; // already handled or closed
+            }
+
+            let parsed = null;
+            try {
+                const text = v_isBinary
+                    ? Buffer.from(p_msg).toString('utf8')
+                    : p_msg.toString();
+                parsed = JSON.parse(text);
+            } catch (e) {
+                fn_sendAuthAck(false, 'bad auth frame format');
+                if (global.m_logger) global.m_logger.Warn('Party sent invalid auth frame (not JSON)', 'fn_onConnect_Handler');
+                p_ws.m_authPending = false;
+                p_ws.close();
+                return;
+            }
+
+            // Verify this is a de_auth system frame
+            if (parsed == null
+                || parsed.ty !== c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM
+                || parsed.mt !== 'de_auth') {
+                fn_sendAuthAck(false, 'expected de_auth frame');
+                if (global.m_logger) global.m_logger.Warn('Party first message was not a de_auth frame', 'fn_onConnect_Handler', null, parsed);
+                p_ws.m_authPending = false;
+                p_ws.close();
+                return;
+            }
+
+            // Build a params object from the frame, matching the query-string
+            // param names so the existing validation logic works unchanged.
+            //   f -> CONST_CS_LOGIN_TEMP_KEY (temp login key)
+            //   s -> CONST_CS_SENDER_ID (party ID)
+            //   at -> CONST_ACTOR_TYPE (actor type)
+            //   k -> plugin API key (local mode, currently unused here)
+            const c_frameParams = {};
+            if (parsed.f != null) c_frameParams[c_CONSTANTS.CONST_CS_LOGIN_TEMP_KEY.toString()] = parsed.f;
+            if (parsed.s != null) c_frameParams[c_CONSTANTS.CONST_CS_SENDER_ID.toString()] = parsed.s;
+            if (parsed.at != null) c_frameParams['at'] = parsed.at;
+
+            p_ws.m_authPending = false;
+
+            // Run the normal validation + accept flow with frame-derived params.
+            // We use a try/catch so a validation failure doesn't crash the server.
+            try {
+                fn_completeConnection(c_frameParams);
+            } catch (e) {
+                fn_sendAuthAck(false, 'validation error');
+                if (global.m_logger) global.m_logger.Error('Auth frame validation error', 'fn_onConnect_Handler', null, e);
+                p_ws.close();
+                return;
+            }
+
+            // If validation succeeded, the acceptConnection/acceptLocalConnection
+            // path will have either accepted the socket (m_loginRequest set) or
+            // closed it. Send the ack based on the outcome.
+            if (p_ws.m_loginRequest != null) {
+                fn_sendAuthAck(true);
+            } else {
+                fn_sendAuthAck(false, 'auth rejected');
+                // socket should already be closed by validation, but ensure it
+                try { p_ws.close(); } catch (e) { /* ignore */ }
+            }
+        };
+
+        // Timeout: if no auth frame arrives within 8s, close the socket.
+        v_authTimer = setTimeout(function () {
+            if (p_ws.m_authPending === true) {
+                p_ws.m_authPending = false;
+                p_ws.removeListener('message', fn_authFrameHandler);
+                fn_sendAuthAck(false, 'auth frame timeout');
+                if (global.m_logger) global.m_logger.Warn('Party auth frame timeout', 'fn_onConnect_Handler');
+                try { p_ws.close(); } catch (e) { /* ignore */ }
+            }
+        }, 8000);
+
+        p_ws.on('message', fn_authFrameHandler);
     }
     else {
-
-        fn_validateKey(c_params);
-
-        if (v_loginTempKey != null) {
-            // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
-
-            acceptConnection(v_loginTempKey, c_params, p_ws);
-        }
-        else {
-            //delete m_waitingAccounts [v_loginTempKey];  v_loginTempKey is already null.
-            p_ws.m_loginRequest = null;
-            p_ws.close();
-        }
+        // Legacy path: validate using query-string params from the URL.
+        fn_completeConnection(c_params);
     }
 
 }
