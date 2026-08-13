@@ -138,6 +138,10 @@ function fn_onConnect_Handler(p_ws, p_req) {
     // If the flag is on but the client sent query creds anyway (backward
     // compat with older clients), fall through to the normal path.
     const c_deferAuthFrame = c_authViaFrame && !c_hasQueryCreds;
+    if (c_authViaFrame && c_hasQueryCreds) {
+        console.log(global.Colors.BFgYellow + '[WARN] ws_auth_via_frame is enabled but client used legacy query-string credentials' + global.Colors.Reset);
+        if (global.m_logger) global.m_logger.Warn('ws_auth_via_frame is enabled but client used legacy query-string credentials', 'fn_onConnect_Handler', null, c_params);
+    }
 
 
     /**
@@ -168,15 +172,12 @@ function fn_onConnect_Handler(p_ws, p_req) {
 
         if (!c_andruav_comm_server.isLoginExist(v_loginTempKey)) {
             // UNAUTHERIZED LOGIN or REPATED Login with same Key .. close the connection.
-            console.log("debug INVALID v_loginTempKey .." + v_loginTempKey)
-
             c_WS.close();
             if (global.m_logger) global.m_logger.Warn('Party failed to login', 'fn_validateKey', null, p_params);
             return false;
         }
         else {
 
-            console.log("debug valid v_loginTempKey .." + v_loginTempKey)
             if (global.m_logger) global.m_logger.Info('Party successfully login', 'fn_validateKey', null, p_params);
 
             return true;
