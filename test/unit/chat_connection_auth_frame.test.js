@@ -4,7 +4,7 @@
  * Unit tests for the auth-frame (security item 2.1) path in
  * server/chat_server/js_chat_connection.js
  *
- * Tests that when ws_auth_via_frame is true and the URL has no credentials,
+ * Tests that when ws_auth_no_frame_old_compatibility is true and the URL has no credentials,
  * the server waits for a de_auth frame, validates it, and sends de_auth_ack.
  */
 
@@ -23,7 +23,7 @@ let g_harness = null;
 function setup(configOverrides) {
     g_harness = installFakeGlobals(Object.assign({
         local_server_enabled: false,
-        ws_auth_via_frame: true,
+        ws_auth_no_frame_old_compatibility: true,
     }, configOverrides || {}));
     return g_harness;
 }
@@ -127,7 +127,7 @@ test('auth-frame: frame params map to query-string param names', () => {
 
 test('auth-frame: backward compat — query-string creds bypass frame path', () => {
     // When the URL already has f= in the query string, the server should
-    // use the legacy path even if ws_auth_via_frame is true.
+    // use the legacy path even if ws_auth_no_frame_old_compatibility is true.
     // This tests the c_deferAuthFrame logic:
     //   c_deferAuthFrame = c_authViaFrame && !c_hasQueryCreds
 
