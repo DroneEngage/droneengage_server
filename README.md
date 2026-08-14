@@ -12,6 +12,7 @@ The communication server provides:
 - Message routing with group and individual targeting
 - System commands and task management
 - Server-to-Server (S2S) authentication for secure relay connections
+- Frame-based client WebSocket authentication (`de_auth` frame) with optional legacy query-string compatibility
 - Storage server integration via DBProxyClient for task persistence
 
 ### Server Roles
@@ -98,6 +99,39 @@ Server-to-Server authentication using Ed25519 keys. The comm server signs challe
 **Note:** Comm servers always attempt authentication when challenged. The accepting server (Auth Server or parent server) controls whether authentication is required via its `s2s_auth_enabled` configuration.
 
 See [wiki/S2SAuthentication.md](wiki/S2SAuthentication.md) for detailed setup.
+
+### Client WebSocket Authentication
+
+Clients authenticate to the comm server's WebSocket endpoint using a `de_auth` system frame instead of passing credentials in the URL query string. Frame-based auth is **always enabled**.
+
+**Protocol:**
+1. Client opens the WebSocket **without** credentials in the query string.
+2. Client sends a `de_auth` system frame as the **first** WS message:
+   ```json
+   { "ty": "s", "mt": "de_auth", "f": "<temp_login_key>", "s": "<sender_id>", "at": "<actor_type>" }
+   ```
+   - `f` — temp login key (`CONST_CS_LOGIN_TEMP_KEY`)
+   - `s` — party/sender ID
+   - `at` — actor type
+3. Server validates the frame and replies with a `de_auth_ack`:
+   ```json
+   { "ty": "s", "mt": "de_auth_ack", "r": "ok" }
+   ```
+   On failure `r` is `"fail"` with an `em` error message, and the socket is closed.
+4. If no auth frame arrives within **8 seconds**, the socket is closed with `r: "fail"`, `em: "auth frame timeout"`.
+
+**Legacy compatibility flag:**
+
+```json
+{
+    "ws_auth_no_frame_old_compatibility": true
+}
+```
+
+| Value | Behavior |
+|-------|----------|
+| `true` (default) | Legacy clients that still send credentials in the URL query string are accepted (with a warning), alongside the frame path. |
+| `false` | Query-string credentials are **rejected**; only the `de_auth` frame path is allowed. Recommended for new deployments. |
 
 ### SSL/TLS
 
