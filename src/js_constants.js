@@ -74,6 +74,14 @@ exports.CONST_TYPE_AndruavSystem_SaveMission            = 9011; // Client -> Com
 exports.CONST_TYPE_AndruavSystem_DeleteMission          = 9012;
 exports.CONST_TYPE_AndruavSystem_QueryServer            = 9013;
 exports.CONST_TYPE_AndruavSystem_StateServer            = 9014;
+exports.CONST_TYPE_AndruavSystem_LoadNews               = 9015; // Client -> CommServer -> StorageServer: load news (account + global)
+exports.CONST_TYPE_AndruavSystem_SaveNews               = 9016; // Client -> CommServer -> StorageServer: save news
+exports.CONST_TYPE_AndruavSystem_DeleteNews             = 9017; // Client -> CommServer -> StorageServer: disable news
+exports.CONST_TYPE_AndruavSystem_NewsPush               = 9018; // StorageServer -> CommServer -> GCS clients: unsolicited news push
+
+// News scopes
+exports.CONST_NEWS_SCOPE_GLOBAL  = 'global';
+exports.CONST_NEWS_SCOPE_ACCOUNT = 'account';
 
 // Subcommands for CONST_TYPE_AndruavSystem_QueryServer / StateServer
 exports.CONST_TYPE_AndruavSystem_QueryServer_SubCmd_Is_Storage_Server_Connected = 1;
