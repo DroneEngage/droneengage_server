@@ -8,7 +8,7 @@
  * Owns the v_andruavTasks instance and its initialization.
  */
 
-const c_dumpError = require("../../dumperror.js");
+const c_dumpError = require("droneengage_server_common").dumperror;
 const c_CONSTANTS = require("../../js_constants.js");
 const c_dbProxyClient = require("../server_to_server/js_db_proxy_client.js");
 

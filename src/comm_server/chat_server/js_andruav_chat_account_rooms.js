@@ -7,7 +7,7 @@
 
 
 const { v4: uuidv4 } = require('uuid');
-const _dumpError = require("../../dumperror.js");
+const _dumpError = require("droneengage_server_common").dumperror;
 const c_activeSenders = require("./js_andruav_active_senders.js");
 
 

@@ -9,7 +9,7 @@
  */
 
 const c_CONSTANTS = require("../../js_constants.js");
-const hlp_strings = require("../../helpers/hlp_strings.js");
+const hlp_strings = require("droneengage_server_common").helpers.strings;
 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
 const c_CommServerManagerClient = require("../js_comm_server_manager_client.js");

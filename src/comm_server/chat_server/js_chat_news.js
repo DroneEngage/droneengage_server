@@ -15,7 +15,7 @@
  * from this WS path, and verify ownership before allowing a DeleteNews.
  */
 
-const c_dumpError = require("../../dumperror.js");
+const c_dumpError = require("droneengage_server_common").dumperror;
 const c_CONSTANTS = require("../../js_constants.js");
 const c_dbProxyClient = require("../server_to_server/js_db_proxy_client.js");
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
