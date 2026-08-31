@@ -7,7 +7,7 @@
  * Extracted from js_andruav_chat_server.js (behavior-preserving).
  */
 
-const c_dumpError = require("../../dumperror.js");
+const c_dumpError = require("droneengage_server_common").dumperror;
 const c_CONSTANTS = require("../../js_constants.js");
 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");

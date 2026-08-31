@@ -22,3 +22,6 @@ TODO.txt
 /wiki/local
 
 build/
+
+# Local config override (merged on top of server.config at runtime)
+server.config.local

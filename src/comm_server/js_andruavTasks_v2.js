@@ -14,7 +14,7 @@
  */
 
 const mysql = require('mysql2');
-const hlp_strings = require('../helpers/hlp_strings.js');
+const hlp_strings = require('droneengage_server_common').helpers.strings;
 var v_dbPool;
 
 

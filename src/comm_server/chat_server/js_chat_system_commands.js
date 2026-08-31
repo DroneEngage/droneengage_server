@@ -7,7 +7,7 @@
  * (behavior-preserving). Task commands are delegated to js_chat_tasks.js.
  */
 
-const c_dumpError = require("../../dumperror.js");
+const c_dumpError = require("droneengage_server_common").dumperror;
 const c_CONSTANTS = require("../../js_constants.js");
 const udp = require('../js_udp_proxy.js');
 
