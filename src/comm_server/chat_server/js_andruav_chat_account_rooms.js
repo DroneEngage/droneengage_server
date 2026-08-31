@@ -94,6 +94,27 @@ function fn_sendToAll (message, isBinary, senderId) {
 
 
 /**
+ * Sends a message to all Ground Control Stations (GCS) across every GROUP of a
+ * single ACCOUNT. Unlike fn_sendToAccountGroup this does not require knowing
+ * the group in advance (e.g. account-wide News push).
+ * @param {*} message
+ * @param {*} isBinary
+ * @param {*} senderId
+ * @param {*} accountId
+ * @returns {boolean} true if the account exists locally and delivery was attempted.
+ */
+function fn_sendToAllGCSInAccount(message, isBinary, senderId, accountId) {
+    const account = c_accounts[accountId];
+    if (account == null) return false;
+
+    for (const groupId in account.m_groups) {
+        account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId);
+    }
+    return true;
+}
+
+
+/**
  * Sends a broadcast scoped to a single ACCOUNT/GROUP, preserving account/group isolation
  * for relayed (super-server) messages. actorType: 'g' (GCS), 'd' (drone), or null (all).
  * Returns true if the target account/group exists locally and delivery was attempted.
@@ -389,6 +410,7 @@ module.exports = {
     fn_del_member_fromAccountByName,
     fn_forEach,
     fn_sendToAllGCS,
+    fn_sendToAllGCSInAccount,
     fn_sendToAllAgent,
     fn_sendToAll,
     fn_sendToAccountGroup,

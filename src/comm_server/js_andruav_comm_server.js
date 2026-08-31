@@ -264,6 +264,10 @@ function fn_startServer() {
             m_commServerManagerClient.fn_sendMessage(p_message);
         });
     }
+
+    // Fan out unsolicited News changes (from any comm server's WS path, or the
+    // storage server admin dashboard) to the GCS clients connected to this comm server.
+    c_dbProxyClient.fn_setNewsPushCallback(require("./chat_server/js_chat_news.js").fn_onNewsPush);
     
     m_agent_chat_server = global.m_chat_server_singelton_get_instance();
     m_agent_chat_server.fn_startServer();

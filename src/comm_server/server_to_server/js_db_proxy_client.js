@@ -42,6 +42,7 @@ let m_currentEndpoint = null; // { host, port, server_id }
 let m_reconnectTimer = null;
 let m_heartbeatTimer = null;
 let m_sendToAuthCallback = null; // Callback to send messages to AUTH
+let m_newsPushCallback = null; // Callback invoked with unsolicited NewsPush payloads from storage server
 let m_pendingRequests = {}; // rid -> { resolve, reject, timeout }
 let m_reconnectAttempts = 0; // Track reconnect attempts for exponential backoff
 let m_connectionState = CONST_CONNECTION_STATE.DISCONNECTED; // Current connection state
@@ -132,6 +133,18 @@ function fn_onMessage(data) {
         clearTimeout(c_req.timeout);
         delete m_pendingRequests[v_msg.rid];
         c_req.resolve(v_msg);
+        return;
+    }
+
+    // Unsolicited push from the storage server (no rid): e.g. NewsPush, fired
+    // whenever any comm server (or the admin dashboard) writes a news item.
+    if ((v_msg.mt === c_CONSTANTS.CONST_TYPE_AndruavSystem_NewsPush) && (m_newsPushCallback != null)) {
+        try {
+            m_newsPushCallback(v_msg.ms);
+        }
+        catch (ex) {
+            console.error(`${global.Colors.Error}DBProxyClient: news push callback failed: ${ex}${global.Colors.Reset}`);
+        }
     }
 }
 
@@ -230,6 +243,16 @@ function fn_initialize() {
  */
 function fn_setSendToAuthCallback(p_callback) {
     m_sendToAuthCallback = p_callback;
+}
+
+/**
+ * Set callback for unsolicited NewsPush messages sent by the storage server
+ * whenever a news item is created/updated/disabled (from any comm server or
+ * the admin dashboard). Called with the news payload ({ news: {...} }).
+ * @param {function} p_callback
+ */
+function fn_setNewsPushCallback(p_callback) {
+    m_newsPushCallback = p_callback;
 }
 
 /**
@@ -406,6 +429,53 @@ function fn_deleteMission(p_missionId, p_accountId) {
     return fn_sendRequest(c_CONST_TYPE_AndruavSystem_DeleteMission, payload);
 }
 
+/**
+ * Load news from storage server (global + the given account's news).
+ * @param {string} p_accountId - Account ID for scoping
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_loadNews(p_accountId) {
+    const c_CONST_TYPE_AndruavSystem_LoadNews = 9015;
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_LoadNews, { accountId: p_accountId });
+}
+
+/**
+ * Save (create or update) a news item on the storage server.
+ * @param {string} p_scope - 'account' or 'global'
+ * @param {string} p_accountId - required when p_scope === 'account'
+ * @param {string} p_title
+ * @param {string} p_body
+ * @param {number} p_priority
+ * @param {string} p_authorId
+ * @param {number} p_expiresAt - epoch seconds, optional
+ * @param {string} p_newsId - optional, to update an existing item
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_saveNews(p_scope, p_accountId, p_title, p_body, p_priority, p_authorId, p_expiresAt = null, p_newsId = null) {
+    const c_CONST_TYPE_AndruavSystem_SaveNews = 9016;
+    const payload = {
+        scope: p_scope,
+        accountId: p_accountId,
+        title: p_title,
+        body: p_body,
+        priority: p_priority,
+        authorId: p_authorId,
+        expiresAt: p_expiresAt
+    };
+    if (p_newsId) payload.newsId = p_newsId;
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_SaveNews, payload);
+}
+
+/**
+ * Disable (soft-delete) a news item on the storage server.
+ * @param {string} p_newsId
+ * @returns {Promise} Resolves with response envelope
+ */
+function fn_deleteNews(p_newsId) {
+    const c_CONST_TYPE_AndruavSystem_DeleteNews = 9017;
+    return fn_sendRequest(c_CONST_TYPE_AndruavSystem_DeleteNews, { newsId: p_newsId });
+}
+
 module.exports = {
     fn_initialize,
     fn_connect,
@@ -413,7 +483,11 @@ module.exports = {
     fn_getConnectionState,
     fn_sendRequest,
     fn_setSendToAuthCallback,
+    fn_setNewsPushCallback,
     fn_loadMission,
     fn_saveMission,
-    fn_deleteMission
+    fn_deleteMission,
+    fn_loadNews,
+    fn_saveNews,
+    fn_deleteNews
 };

@@ -14,6 +14,7 @@ const udp = require('../js_udp_proxy.js');
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
 const c_tasks = require("./js_chat_tasks.js");
 const c_queryServer = require("./js_chat_query_server.js");
+const c_news = require("./js_chat_news.js");
 
 
 function onSystemMessage(v_jmsg, p_ws) {
@@ -114,6 +115,18 @@ function onSystemMessage(v_jmsg, p_ws) {
 
             case c_CONSTANTS.CONST_TYPE_AndruavSystem_QueryServer:
                 c_queryServer.fn_handleQueryServer(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadNews:
+                c_news.fn_handleLoadNews(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveNews:
+                c_news.fn_handleSaveNews(v_jmsg, p_ws);
+                break;
+
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_DeleteNews:
+                c_news.fn_handleDeleteNews(v_jmsg, p_ws);
                 break;
 
         }
