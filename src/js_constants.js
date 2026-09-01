@@ -80,6 +80,8 @@ exports.CONST_TYPE_AndruavSystem_LoadNews               = 9015; // Client -> Com
 exports.CONST_TYPE_AndruavSystem_SaveNews               = 9016; // Client -> CommServer -> StorageServer: save news
 exports.CONST_TYPE_AndruavSystem_DeleteNews             = 9017; // Client -> CommServer -> StorageServer: disable news
 exports.CONST_TYPE_AndruavSystem_NewsPush               = 9018; // StorageServer -> CommServer -> GCS clients: unsolicited news push
+exports.CONST_TYPE_AndruavSystem_AisSub                  = 9019; // GCS -> CommServer: AIS subscribe/unsubscribe (plugin)
+exports.CONST_TYPE_AndruavSystem_AisPush                 = 9020; // CommServer -> GCS: AIS data push (plugin)
 
 // News scopes
 exports.CONST_NEWS_SCOPE_GLOBAL  = 'global';
