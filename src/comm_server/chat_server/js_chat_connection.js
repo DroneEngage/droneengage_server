@@ -16,6 +16,7 @@ const c_CommServerManagerClient = require("../js_comm_server_manager_client.js")
 const c_andruav_comm_server = require("../js_andruav_comm_server.js");
 const c_andruav_active_senders = require("./js_andruav_active_senders.js");
 const c_routing = require("./js_chat_routing.js");
+const c_udp = require("../js_udp_proxy.js");
 
 
 function getHeaderParams(url) {
@@ -222,8 +223,17 @@ function fn_onConnect_Handler(p_ws, p_req) {
         // also this function is called when terminated a socket when a senderID kicks out an older unit with same senderID.
         // in this case m__terminated = true other wise the new senderID will also kick itself.
         //console.log ("debug ... fn_onWsClose code: " + p_code + " of key " + v_loginTempKey);
+
+        // Capture unit name before member removal may clear it.
+        const v_unitName = p_ws.name;
+
         if ((this.hasOwnProperty('m__terminated') == false) || (this.m__terminated == false)) {
             c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
+        }
+
+        // Clean up any UDP proxy owned by this unit so it is not left orphaned.
+        if (v_unitName != null) {
+            c_udp.closeUDPSocket(v_unitName, function () {});
         }
 
         // remove from active senderIDs list and notify auth server.

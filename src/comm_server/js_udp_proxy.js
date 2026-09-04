@@ -11,6 +11,9 @@ const dgram = require('dgram');
 const fs = require('fs');
 const os = require('os');
 
+const c_activeSenders = require("./chat_server/js_andruav_active_senders.js");
+const c_CONSTANTS = require("../js_constants.js");
+
 const PROXY_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const REAPER_INTERVAL_MS = 60 * 1000; // Check every 1 minute
 
@@ -257,8 +260,11 @@ const m_activeUdpProxy = {};
 let m_reaperInterval = null;
 let m_lastReaperTick = 0;
 
-function recreateProxy(name, entry, reason) {
-    if (!entry || !entry.m_udpproxy) return false;
+function recreateProxy(name, entry, reason, onComplete) {
+    if (!entry || !entry.m_udpproxy) {
+        if (onComplete) onComplete(false);
+        return false;
+    }
 
     const oldProxy = entry.m_udpproxy;
     const config = oldProxy.getConfig();
@@ -285,6 +291,11 @@ function recreateProxy(name, entry, reason) {
             } else {
                 console.log(`UDP proxy '${name}' recreate failed (${reason}).`);
             }
+            // The new sockets only become ready asynchronously (on the dgram
+            // 'listening' event), so callers must wait for this callback
+            // rather than reading getConfig()/isReady() right after the call
+            // returns.
+            if (onComplete) onComplete(enabled);
         }
     );
 
@@ -301,6 +312,35 @@ function recoverAllProxiesAfterResume(gapMs) {
     for (const name of names) {
         const entry = m_activeUdpProxy[name];
         recreateProxy(name, entry, 'resume recovery');
+    }
+}
+
+/**
+ * Notifies a connected vehicle that its UDP proxy has been closed by the
+ * reaper, so the vehicle can update its internal state and re-request the
+ * proxy when telemetry is resumed.  If the unit is no longer connected the
+ * notification is silently skipped.
+ */
+function notifyUnitProxyClosed(name, reason) {
+    try {
+        const socket = c_activeSenders.getActiveSender(name);
+        if (socket == null || socket.readyState !== 1) return;
+
+        const msg = {};
+        msg[c_CONSTANTS.CONST_WS_MESSAGE_ID] = c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy;
+        msg[c_CONSTANTS.CONST_WS_MSG_ROUTING] = c_CONSTANTS.CONST_WS_MSG_ROUTING_INDIVIDUAL;
+        msg[c_CONSTANTS.CONST_WS_TARGET_ID] = name;
+        msg[c_CONSTANTS.CONST_WS_SENDER_ID] = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
+        msg[c_CONSTANTS.CONST_WS_PAYLOAD] = {
+            en: false,
+            socket1: { address: '0.0.0.0', port: 0 },
+            socket2: { address: '0.0.0.0', port: 0 }
+        };
+
+        socket.send(JSON.stringify(msg));
+        console.log(`Reaper: Notified unit '${name}' that its UDP proxy was closed (${reason}).`);
+    } catch (err) {
+        console.error(`Reaper: Failed to notify unit '${name}' of proxy closure:`, err);
     }
 }
 
@@ -326,20 +366,34 @@ function startReaper() {
             if (!entry || !entry.m_udpproxy) continue;
 
             if (!entry.m_udpproxy.isReady()) {
-                recreateProxy(name, entry, 'health check not ready');
+                recreateProxy(name, entry, 'health check not ready', (enabled) => {
+                    // If recreate also failed, notify the unit so it can re-request.
+                    if (!enabled) {
+                        notifyUnitProxyClosed(name, 'health check recreate failed');
+                    }
+                });
                 continue;
             }
-            
+
             const lastAccess = Math.max(
                 entry.last_access || 0,
                 entry.m_udpproxy._udp_socket1?.getLastAccessTime() || 0,
                 entry.m_udpproxy._udp_socket2?.getLastAccessTime() || 0
             );
-            
+
             if (now - lastAccess > PROXY_IDLE_TIMEOUT_MS) {
-                console.log(`Reaper: Closing idle UDP proxy '${name}' (idle for ${Math.round((now - lastAccess) / 1000)}s)`);
+                // Skip idle close if the unit is still connected — the proxy
+                // is still needed (telemetry may simply be paused).  Only
+                // reap orphaned proxies for units that have disconnected.
+                const ws = c_activeSenders.getActiveSender(name);
+                if (ws != null && ws.readyState === 1) {
+                    continue;
+                }
+
+                console.log(`Reaper: Closing idle UDP proxy '${name}' (idle for ${Math.round((now - lastAccess) / 1000)}s, unit disconnected)`);
                 entry.m_udpproxy.close();
                 delete m_activeUdpProxy[name];
+                notifyUnitProxyClosed(name, 'idle timeout (unit disconnected)');
             }
         }
         
@@ -402,10 +456,11 @@ function getUDPSocket(name, socket1, socket2, callback) {
 
         if ((socket1.port === 0 || ms.socket1.port === socket1.port) && (socket2.port === 0 || ms.socket2.port === socket2.port)) {
             if (!entry.m_udpproxy.isReady()) {
-                recreateProxy(name, entry, 'getUDPSocket refresh');
-                const refreshed = entry.m_udpproxy.getConfig();
-                refreshed.en = entry.m_udpproxy.isReady();
-                callback(refreshed);
+                recreateProxy(name, entry, 'getUDPSocket refresh', (enabled) => {
+                    const refreshed = entry.m_udpproxy.getConfig();
+                    refreshed.en = enabled;
+                    callback(refreshed);
+                });
             } else {
                 // Same socket same configuration.
                 entry.last_access = Date.now();
