@@ -224,32 +224,37 @@ function fn_onConnect_Handler(p_ws, p_req) {
         // in this case m__terminated = true other wise the new senderID will also kick itself.
         //console.log ("debug ... fn_onWsClose code: " + p_code + " of key " + v_loginTempKey);
 
-        // Capture unit name before member removal may clear it.
-        const v_unitName = p_ws.name;
-
+        // If this socket was terminated because a newer connection with the same
+        // senderID already replaced it (see _acceptConnection's kick-out call),
+        // then group membership, the UDP proxy, and the active-senders entry all
+        // already belong to that newer connection by the time this async 'close'
+        // fires. None of the by-name cleanup below may run in that case, or it
+        // would tear down the replacement's state instead of this stale one's.
         if ((this.hasOwnProperty('m__terminated') == false) || (this.m__terminated == false)) {
+            const v_unitName = p_ws.name;
+
             c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
-        }
 
-        // Clean up any UDP proxy owned by this unit so it is not left orphaned.
-        if (v_unitName != null) {
-            c_udp.closeUDPSocket(v_unitName, function () {});
-        }
+            // Clean up any UDP proxy owned by this unit so it is not left orphaned.
+            if (v_unitName != null) {
+                c_udp.closeUDPSocket(v_unitName, function () {});
+            }
 
-        // remove from active senderIDs list and notify auth server.
-        if (p_ws.m_loginRequest != null) {
-            c_andruav_active_senders.deleteActiveSenderIDList(p_ws.m_loginRequest.m_senderID);
+            // remove from active senderIDs list and notify auth server.
+            if (p_ws.m_loginRequest != null) {
+                c_andruav_active_senders.deleteActiveSenderIDList(p_ws.m_loginRequest.m_senderID);
 
-            // Send logout notification to auth server
-            const c_logout_msg = {
-                'c': c_CONSTANTS.CONST_CS_CMD_LOGOUT_REQUEST,
-                'd': {}
-            };
-            c_logout_msg.d[c_CONSTANTS.CONST_CS_SENDER_ID.toString()] = p_ws.m_loginRequest.m_senderID;
-            c_CommServerManagerClient.fn_sendMessage(JSON.stringify(c_logout_msg));
+                // Send logout notification to auth server
+                const c_logout_msg = {
+                    'c': c_CONSTANTS.CONST_CS_CMD_LOGOUT_REQUEST,
+                    'd': {}
+                };
+                c_logout_msg.d[c_CONSTANTS.CONST_CS_SENDER_ID.toString()] = p_ws.m_loginRequest.m_senderID;
+                c_CommServerManagerClient.fn_sendMessage(JSON.stringify(c_logout_msg));
 
-            if (c_CommServerManagerClient.fn_updateAuthServer) {
-                c_CommServerManagerClient.fn_updateAuthServer();
+                if (c_CommServerManagerClient.fn_updateAuthServer) {
+                    c_CommServerManagerClient.fn_updateAuthServer();
+                }
             }
         }
     }

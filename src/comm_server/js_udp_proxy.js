@@ -413,6 +413,36 @@ function stopReaper() {
     m_lastReaperTick = 0;
 }
 
+/**
+ * Snapshot of every currently-tracked UDP proxy, for reporting to AUTH's
+ * dashboard. Includes proxies that exist but are momentarily not ready
+ * (e.g. mid-recreate) so the dashboard reflects reality, not just healthy ones.
+ */
+function fn_getActiveProxiesList() {
+    return Object.keys(m_activeUdpProxy).map((name) => {
+        const entry = m_activeUdpProxy[name];
+        const proxy = entry.m_udpproxy;
+        const config = proxy ? proxy.getConfig() : {
+            socket1: { address: '0.0.0.0', port: 0 },
+            socket2: { address: '0.0.0.0', port: 0 }
+        };
+        const lastAccess = Math.max(
+            entry.last_access || 0,
+            proxy?._udp_socket1?.getLastAccessTime() || 0,
+            proxy?._udp_socket2?.getLastAccessTime() || 0
+        );
+
+        return {
+            name: name,
+            socket1: config.socket1,
+            socket2: config.socket2,
+            ready: proxy ? proxy.isReady() : false,
+            created: entry.created,
+            last_access: lastAccess
+        };
+    });
+}
+
 function closeUDPSocket(name, callback) {
     let ms = {};
     if (m_activeUdpProxy.hasOwnProperty(name)) {
@@ -431,6 +461,8 @@ function closeUDPSocket(name, callback) {
 }
 
 function getUDPSocket(name, socket1, socket2, callback) {
+    console.log(`getUDPSocket('${name}', socket1.port=${socket1.port}, socket2.port=${socket2.port}) existing=${m_activeUdpProxy.hasOwnProperty(name)}`);
+
     if (!m_activeUdpProxy.hasOwnProperty(name) || m_activeUdpProxy[name] == null) {
         // New socket
         const obj = {
@@ -446,6 +478,7 @@ function getUDPSocket(name, socket1, socket2, callback) {
             obj.socket1_port = ms.socket1.port;
             obj.socket2_port = ms.socket2.port;
             ms.en = enabled;
+            console.log(`getUDPSocket('${name}') proxy ready=${enabled} socket1=${JSON.stringify(ms.socket1)} socket2=${JSON.stringify(ms.socket2)}`);
             startReaper();
             callback(ms);
         });
@@ -481,5 +514,6 @@ module.exports = {
     udp_proxy,
     getUDPSocket,
     closeUDPSocket,
-    checkAndFixKernelBuffers
+    checkAndFixKernelBuffers,
+    fn_getActiveProxiesList
 };

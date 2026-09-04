@@ -22,8 +22,11 @@ function onSystemMessage(v_jmsg, p_ws) {
     try {
         switch (v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID]) {
             case c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy:
+                console.log(`UdpProxy request from '${p_ws.name}' en=${v_jmsg.ms && v_jmsg.ms.en} actorType=${p_ws.m_loginRequest && p_ws.m_loginRequest.m_actorType}`);
+
                 if (p_ws.m_loginRequest.m_actorType !== c_CONSTANTS.CONST_ACTOR_TYPE_DRONE) {
                     // only vehicle can create udp proxy
+                    console.log(`UdpProxy request from '${p_ws.name}' REJECTED: not a drone actorType`);
                     return;
                 }
 

@@ -6,6 +6,7 @@ const c_ChatAccountRooms = require("./chat_server/js_andruav_chat_account_rooms"
 const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
 const c_dbProxyClient = require("./server_to_server/js_db_proxy_client.js");
+const c_udpProxy = require("./js_udp_proxy.js");
 const v_version = require('../../package.json').version;
 
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
@@ -188,8 +189,14 @@ function fn_AuthServerMessagesHandler(p_msg) {
 
             case c_CONSTANTS.CONST_CS_CMD_LOGOUT_REQUEST:
                 {
-                    //@todo: not implemented    
+                    //@todo: not implemented
 
+                }
+                break;
+
+            case c_CONSTANTS.CONST_CS_CMD_QUERY_UDP_PROXIES:
+                {
+                    fn_handleQueryUdpProxies(p_cmd);
                 }
                 break;
         }
@@ -199,6 +206,26 @@ function fn_AuthServerMessagesHandler(p_msg) {
     }
 }
 
+
+/**
+ * Replies to an AUTH-server QUERY for this comm server's currently-open UDP
+ * proxies, so AUTH can display them on its dashboard.
+ * @param {*} p_cmd request from AUTH_SERVER. p_cmd.d{r: requestID GUID} (optional, echoed back)
+ */
+function fn_handleQueryUdpProxies(p_cmd) {
+    const c_reply = {
+        'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
+        'd': {
+            'proxies': c_udpProxy.fn_getActiveProxiesList()
+        }
+    };
+
+    if (p_cmd.d && p_cmd.d.hasOwnProperty(c_CONSTANTS.CONST_CS_REQUEST_ID.toString())) {
+        c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
+    }
+
+    m_commServerManagerClient.fn_sendMessage(JSON.stringify(c_reply));
+}
 
 function fn_updateServerWatchdog() {
     try {
