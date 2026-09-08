@@ -261,7 +261,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
 
 
     function fn_onWsError(p_err) {
-        console.log("debug ... fn_onWsError err: " + p_err);
+        if (global.DEBUG_LOGGING) console.log("debug ... fn_onWsError err: " + p_err);
         if (global.m_logger) global.m_logger.Error('Party WS Error', 'fn_onWsError', null, p_err);
     }
 

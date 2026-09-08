@@ -47,6 +47,7 @@ let m_pendingRequests = {}; // rid -> { resolve, reject, timeout }
 let m_reconnectAttempts = 0; // Track reconnect attempts for exponential backoff
 let m_connectionState = CONST_CONNECTION_STATE.DISCONNECTED; // Current connection state
 let m_s2sAuthTimer = null; // Timer for S2S auth challenge timeout
+let m_lastSentStorageStatus = null; // Last status sent to AUTH, to suppress redundant heartbeat sends
 
 function fn_clearPending(p_error) {
     const c_keys = Object.keys(m_pendingRequests);
@@ -62,7 +63,7 @@ function fn_onOpen() {
     console.log(`${global.Colors.BSuccess}[OK] DBProxyClient connected to storage server${global.Colors.Reset}`);
     m_reconnectAttempts = 0; // Reset reconnect attempts on successful connection
     m_connectionState = CONST_CONNECTION_STATE.CONNECTING;
-    fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTING);
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTING, null, true);
 
     // If storage server doesn't send S2S challenge within 2 seconds, assume no auth required
     if (m_s2sAuthTimer) {
@@ -73,7 +74,7 @@ function fn_onOpen() {
             console.log(`${global.Colors.FgYellow}[INFO] DBProxyClient: No S2S challenge received, assuming no auth required${global.Colors.Reset}`);
             m_authenticated = true;
             m_connectionState = CONST_CONNECTION_STATE.CONNECTED;
-            fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED);
+            fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED, null, true);
             fn_startHeartbeat();
         }
     }, 2000);
@@ -117,7 +118,7 @@ function fn_onMessage(data) {
         m_authenticated = true;
         m_connectionState = CONST_CONNECTION_STATE.CONNECTED;
         console.log(`${global.Colors.BSuccess}[OK] DBProxyClient authenticated with storage server${global.Colors.Reset}`);
-        fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED);
+        fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED, null, true);
         fn_startHeartbeat();
         return;
     }
@@ -154,7 +155,7 @@ function fn_onClose() {
     m_ws = null;
     m_connectionState = CONST_CONNECTION_STATE.DISCONNECTED;
     fn_stopHeartbeat();
-    fn_sendStorageStatus(CONST_CONNECTION_STATE.DISCONNECTED, 'Connection closed');
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.DISCONNECTED, 'Connection closed', true);
     fn_clearPending(new Error('DBProxyClient disconnected'));
 
     // Clear S2S auth timer
@@ -181,7 +182,7 @@ function fn_onClose() {
 function fn_onError(err) {
     console.error(`${global.Colors.Error}DBProxyClient WebSocket error: ${err}${global.Colors.Reset}`);
     m_connectionState = CONST_CONNECTION_STATE.UNHEALTHY;
-    fn_sendStorageStatus(CONST_CONNECTION_STATE.ERROR, err.message);
+    fn_sendStorageStatus(CONST_CONNECTION_STATE.ERROR, err.message, true);
     // Close the socket to trigger reconnect logic
     if (m_ws != null) {
         try { m_ws.close(); } catch (ex) { /* ignore */ }
@@ -256,14 +257,25 @@ function fn_setNewsPushCallback(p_callback) {
 }
 
 /**
- * Send storage status message to AUTH
+ * Send storage status message to AUTH.
+ * Suppresses redundant sends: if the status is unchanged since the last send
+ * the message is skipped (the heartbeat calls this every 30s with the same
+ * CONNECTED status). Pass p_force=true to send regardless (used by event
+ * handlers where the status genuinely changed).
  * @param {string} p_status - 'connected', 'disconnected', or 'error'
  * @param {string} p_error - Optional error message
+ * @param {boolean} p_force - Optional: send even if status unchanged
  */
-function fn_sendStorageStatus(p_status, p_error = null) {
+function fn_sendStorageStatus(p_status, p_error = null, p_force = false) {
     if (!m_sendToAuthCallback) {
         return; // No callback set, can't send to AUTH
     }
+
+    // Suppress redundant heartbeat sends when the status hasn't changed.
+    if (!p_force && (m_lastSentStorageStatus === p_status)) {
+        return;
+    }
+    m_lastSentStorageStatus = p_status;
 
     const c_cmd = {
         c: c_CONSTANTS.CONST_CS_CMD_STORAGE_STATUS,
