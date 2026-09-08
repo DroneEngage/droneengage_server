@@ -27,11 +27,15 @@ process.on('SIGINT', function() {
 function checkMemory()
     {
         const used = process.memoryUsage();
-        let readings = "";
-        for (let key in used) {
-            readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
+        // Only dump per-tick readings when verbose debug logging is enabled to
+        // avoid log spam (this fires every 60s).
+        if (global.DEBUG_LOGGING) {
+            let readings = "";
+            for (let key in used) {
+                readings += `${key} ${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB - `;
+            }
+            console.log(readings);
         }
-        console.log(readings);
 
         // Check memory limit
         if (global.m_serverconfig.m_configuration.memory_max != null) {
@@ -169,6 +173,9 @@ function fn_startServer ()
 
     // load server configuration
     global.m_serverconfig.init(v_configFileName);
+
+    // Verbose console debug logging (checkMemory readings, debug ... lines). Off by default.
+    global.DEBUG_LOGGING = (global.m_serverconfig.m_configuration.debug_logging === true);
         
     // display info
     fn_displayInfo();

@@ -17,5 +17,10 @@ const path = require("path");
 
 module.exports = common.create({
     configDir: path.join(__dirname, '..'),
-    enableHashHandling: false   // comm server has no $$HASH$$ feature
+    enableHashHandling: false,   // comm server has no $$HASH$$ feature
+    envOverrides: {
+        'de_comm_debug_logging': (cfg, val) => {
+            cfg.debug_logging = (val === 'true' || val === '1');
+        }
+    }
 });
