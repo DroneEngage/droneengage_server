@@ -73,7 +73,7 @@ function fn_displayInfo ()
     console.log ("Auth Server ip: " + global.Colors.BSuccess +  global.m_serverconfig.m_configuration.s2s_ws_target_ip + global.Colors.Reset + " port: " + global.Colors.BSuccess + global.m_serverconfig.m_configuration.s2s_ws_target_port + global.Colors.Reset);
     if (global.m_serverconfig.m_configuration.ignoreLog!==false)
     {
-        console.log ("logging is " + global.Colors.FgYellow + 'disabled' + global.Colors.Reset);
+        console.log ("logging is " + global.Colors.BFgYellow + 'disabled' + global.Colors.Reset);
     }
     else
     {
@@ -102,7 +102,7 @@ function fn_displayInfo ()
         
         global.m_logger.SetUserOptions(options); 
 
-        console.log ("logging is " + global.Colors.FgYellow + 'enabled' + global.Colors.Reset);
+        console.log ("logging is " + global.Colors.BFgYellow + 'enabled' + global.Colors.Reset);
 
         if (global.m_logger) global.m_logger.Info('System Started.');
     }
