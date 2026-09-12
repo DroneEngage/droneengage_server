@@ -192,7 +192,7 @@ exports.fn_fn_get_tasks_sids = function fn_fn_get_tasks_sids(params) {
 
 			sql = sql + _getTasksSQLWhere(params.largerThan_SID, params.accountID, params.party_sid, params.groupName, params.sender, params.receiver, params.messageType, params.task, params.isPermanent);
 
-			console.log("SQL:" + sql);
+			if (global.DEBUG_LOGGING) console.log("SQL:" + sql);
 			dbConnection.query(sql, function (err, rows) {
 				//release connection now
 				if (dbConnection != null) dbConnection.release();
@@ -264,7 +264,7 @@ exports.fn_get_tasks = function fn_get_tasks(params) {
 			sql = sql + _getTasksSQLWhere(params.largerThan_SID, params.accountID, params.party_sid, params.groupName, params.sender, params.receiver, params.messageType, params.task, params.isPermanent);
 
 
-			console.log("SQL:" + sql);
+			if (global.DEBUG_LOGGING) console.log("SQL:" + sql);
 			dbConnection.query(sql, function (err, rows) {
 				//release connection now
 				if (dbConnection != null) dbConnection.release();
@@ -318,7 +318,7 @@ exports.fn_del_tasks = function fn_del_tasks(params) {
 
 			sql = sql + fn_getTasksSQLWhere2(params.largerThan_SID, params.accountID, params.party_sid, params.groupName, params.sender, params.receiver, params.messageType, params.task, params.isPermanent, params.enabled);
 
-			console.log("SQL:" + sql);
+			if (global.DEBUG_LOGGING) console.log("SQL:" + sql);
 
 			dbConnection.query(sql, function (err, rows) {
 				//release connection now
@@ -372,7 +372,7 @@ exports.fn_disable_tasks = function fn_disable_tasks(params) {
 
 			sql = sql + fn_getTasksSQLWhere2(params.largerThan_SID, params.accountID, params.party_sid, params.groupName, params.sender, params.receiver, params.messageType, params.task, params.isPermanent, params.enabled);
 
-			console.log("SQL:" + sql);
+			if (global.DEBUG_LOGGING) console.log("SQL:" + sql);
 			dbConnection.query(sql, function (err, res) {
 				//release connection now
 
@@ -386,7 +386,7 @@ exports.fn_disable_tasks = function fn_disable_tasks(params) {
 
 					return;
 				}
-				console.log(res);
+				if (global.DEBUG_LOGGING) console.log(res);
 				if (params.resultfunc != undefined) params.resultfunc(res);
 
 
@@ -471,7 +471,7 @@ exports.fn_add_task = function fn_add_task(params) {
 
 
 
-			console.log("SQL:" + sql);
+			if (global.DEBUG_LOGGING) console.log("SQL:" + sql);
 			dbConnection.query(sql, function (err, rows) {
 				//release connection now
 				if (dbConnection != null) dbConnection.release();
