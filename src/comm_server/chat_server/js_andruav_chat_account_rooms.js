@@ -41,7 +41,8 @@ function fn_getAccountDetails() {
                 const c_socket = c_group.m_units[c_unitName];
                 c_unitDetails.push({
                     unitName: c_unitName,
-                    actorType: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_actorType : 'a'
+                    actorType: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_actorType : 'a',
+                    requestId: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_requestID : null
                 });
             }
         }
