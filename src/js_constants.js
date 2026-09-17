@@ -22,6 +22,7 @@ exports.CONST_CS_CMD_LOGOUT_REQUEST             = 'c';
 exports.CONST_CS_CMD_STORAGE_STATUS             = 'd';   // CommServer -> AUTH: storage server connection status
 exports.CONST_CS_CMD_QUERY_UDP_PROXIES          = 'e';   // AUTH -> CommServer: request list of currently-open UDP proxies
 exports.CONST_CS_CMD_REPORT_UDP_PROXIES         = 'f';   // CommServer -> AUTH: reply with list of currently-open UDP proxies
+exports.CONST_CS_CMD_SET_UDP_PROXY_STATE        = 'g';   // AUTH -> CommServer: block/resume packet forwarding on a named UDP proxy
 
 exports.CONST_CS_ACCOUNT_ID                     = 'a';
 exports.CONST_CS_GROUP_ID                       = 'b';

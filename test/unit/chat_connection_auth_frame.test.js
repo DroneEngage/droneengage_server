@@ -111,7 +111,7 @@ test('auth-frame: rejects first message that is not a de_auth frame', () => {
 test('auth-frame: frame params map to query-string param names', () => {
     // Verify the mapping from frame fields to the constant names used by
     // the existing validation logic.
-    const c_CONSTANTS = require('../../js_constants.js');
+    const c_CONSTANTS = require('../../src/js_constants.js');
 
     const frame = { f: 'key123', s: 'party456', at: 'g' };
     const params = {};

@@ -199,6 +199,7 @@ class udp_proxy {
         this._callback = callback;
         this._ready_counter = 0;
         this._ready_proxy = true;
+        this._blocked = false;
 
         host1 = host1 || "0.0.0.0";
         port1 = port1 || 0;
@@ -247,11 +248,26 @@ class udp_proxy {
         return this._udp_socket1.isReady() && this._udp_socket2.isReady();
     }
 
+    /**
+     * Blocks or resumes packet forwarding. A blocked proxy keeps its sockets
+     * open and keeps receiving, but silently drops packets — the client side
+     * cannot distinguish this from packet loss.
+     */
+    setBlocked(blocked) {
+        this._blocked = (blocked === true);
+    }
+
+    isBlocked() {
+        return this._blocked === true;
+    }
+
     onSocket1Receive(message, Me) {
+        if (Me._blocked === true) return;
         Me._udp_socket2.sendMessage(message);
     }
 
     onSocket2Receive(message, Me) {
+        if (Me._blocked === true) return;
         Me._udp_socket1.sendMessage(message);
     }
 }
@@ -298,6 +314,9 @@ function recreateProxy(name, entry, reason, onComplete) {
             if (onComplete) onComplete(enabled);
         }
     );
+
+    // An admin-blocked proxy stays blocked across recreates.
+    entry.m_udpproxy.setBlocked(entry.blocked === true);
 
     entry.last_access = Date.now();
     return true;
@@ -437,10 +456,29 @@ function fn_getActiveProxiesList() {
             socket1: config.socket1,
             socket2: config.socket2,
             ready: proxy ? proxy.isReady() : false,
+            blocked: entry.blocked === true,
             created: entry.created,
             last_access: lastAccess
         };
     });
+}
+
+/**
+ * Blocks or resumes packet forwarding on a named proxy. In-memory only — the
+ * flag is lost on restart, and blocking is invisible to clients (packets are
+ * silently dropped, indistinguishable from packet loss).
+ * @returns {boolean} true if a proxy with this name exists
+ */
+function fn_setProxyBlocked(name, blocked) {
+    const entry = m_activeUdpProxy[name];
+    if (!entry) return false;
+
+    entry.blocked = (blocked === true);
+    if (entry.m_udpproxy) {
+        entry.m_udpproxy.setBlocked(entry.blocked);
+    }
+    console.log(`UDP proxy '${name}' ${entry.blocked ? 'BLOCKED (packets dropped)' : 'unblocked (forwarding resumed)'} by admin.`);
+    return true;
 }
 
 function closeUDPSocket(name, callback) {
@@ -515,5 +553,6 @@ module.exports = {
     getUDPSocket,
     closeUDPSocket,
     checkAndFixKernelBuffers,
-    fn_getActiveProxiesList
+    fn_getActiveProxiesList,
+    fn_setProxyBlocked
 };
