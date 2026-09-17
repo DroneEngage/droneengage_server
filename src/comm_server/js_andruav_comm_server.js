@@ -199,6 +199,12 @@ function fn_AuthServerMessagesHandler(p_msg) {
                     fn_handleQueryUdpProxies(p_cmd);
                 }
                 break;
+
+            case c_CONSTANTS.CONST_CS_CMD_SET_UDP_PROXY_STATE:
+                {
+                    fn_handleSetUdpProxyState(p_cmd);
+                }
+                break;
         }
     }
     catch (ex) {
@@ -217,6 +223,38 @@ function fn_handleQueryUdpProxies(p_cmd) {
         'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
         'd': {
             'proxies': c_udpProxy.fn_getActiveProxiesList()
+        }
+    };
+
+    if (p_cmd.d && p_cmd.d.hasOwnProperty(c_CONSTANTS.CONST_CS_REQUEST_ID.toString())) {
+        c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
+    }
+
+    m_commServerManagerClient.fn_sendMessage(JSON.stringify(c_reply));
+}
+
+/**
+ * Handles an AUTH-server request to block/resume packet forwarding on a named
+ * UDP proxy (p_cmd.d{name: unit/proxy name, blocked: bool}). The block is
+ * in-memory only and silently drops packets. Replies with the same
+ * CONST_CS_CMD_REPORT_UDP_PROXIES report shape so AUTH can refresh its view.
+ */
+function fn_handleSetUdpProxyState(p_cmd) {
+    const c_name = p_cmd.d ? p_cmd.d.name : null;
+    const c_blocked = (p_cmd.d && p_cmd.d.blocked === true);
+    const c_applied = (typeof c_name === 'string') && c_udpProxy.fn_setProxyBlocked(c_name, c_blocked);
+
+    if (!c_applied) {
+        console.log(`[WARN] SET_UDP_PROXY_STATE for unknown proxy '${c_name}'`);
+    }
+
+    const c_reply = {
+        'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
+        'd': {
+            'proxies': c_udpProxy.fn_getActiveProxiesList(),
+            'name': c_name,
+            'blocked': c_blocked,
+            'applied': c_applied
         }
     };
 
