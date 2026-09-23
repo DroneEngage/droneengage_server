@@ -9,6 +9,7 @@
 const { v4: uuidv4 } = require('uuid');
 const _dumpError = require("droneengage_server_common").dumperror;
 const c_activeSenders = require("./js_andruav_active_senders.js");
+const c_outboundGuard = require("./js_outbound_guard.js");
 
 
 const c_accounts = {};
@@ -42,7 +43,8 @@ function fn_getAccountDetails() {
                 c_unitDetails.push({
                     unitName: c_unitName,
                     actorType: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_actorType : 'a',
-                    requestId: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_requestID : null
+                    requestId: c_socket.m_loginRequest ? c_socket.m_loginRequest.m_requestID : null,
+                    blocked: c_activeSenders.fn_isSenderBlocked(c_unitName)
                 });
             }
         }
@@ -58,11 +60,11 @@ function fn_getAccountDetails() {
  * @param {*} isBinary 
  * @param {*} senderId 
  */
-function fn_sendToAllGCS(message, isBinary, senderId) {
+function fn_sendToAllGCS(message, isBinary, senderId, p_msgClass) {
     for (const accountId in c_accounts) {
         const account = c_accounts[accountId];
         for (const groupId in account.m_groups) {
-            account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId);
+            account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId, p_msgClass);
         }
     }
 }
@@ -74,21 +76,21 @@ function fn_sendToAllGCS(message, isBinary, senderId) {
  * @param {*} isBinary 
  * @param {*} senderId 
  */
-function fn_sendToAllAgent(message, isBinary, senderId) {
+function fn_sendToAllAgent(message, isBinary, senderId, p_msgClass) {
     for (const accountId in c_accounts) {
         const account = c_accounts[accountId];
         for (const groupId in account.m_groups) {
-            account.m_groups[groupId].fn_broadcastToDrone(message, isBinary, senderId);
+            account.m_groups[groupId].fn_broadcastToDrone(message, isBinary, senderId, p_msgClass);
         }
     }
 }
 
 
-function fn_sendToAll (message, isBinary, senderId) {
+function fn_sendToAll (message, isBinary, senderId, p_msgClass) {
     for (const accountId in c_accounts) {
         const account = c_accounts[accountId];
         for (const groupId in account.m_groups) {
-            account.m_groups[groupId].fn_broadcast(message, isBinary, senderId);
+            account.m_groups[groupId].fn_broadcast(message, isBinary, senderId, null, p_msgClass);
         }
     }
 }
@@ -104,12 +106,12 @@ function fn_sendToAll (message, isBinary, senderId) {
  * @param {*} accountId
  * @returns {boolean} true if the account exists locally and delivery was attempted.
  */
-function fn_sendToAllGCSInAccount(message, isBinary, senderId, accountId) {
+function fn_sendToAllGCSInAccount(message, isBinary, senderId, accountId, p_msgClass) {
     const account = c_accounts[accountId];
     if (account == null) return false;
 
     for (const groupId in account.m_groups) {
-        account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId);
+        account.m_groups[groupId].fn_broadcastToGCS(message, isBinary, senderId, p_msgClass);
     }
     return true;
 }
@@ -126,35 +128,35 @@ function fn_sendToAllGCSInAccount(message, isBinary, senderId, accountId) {
  * @param {*} groupId
  * @param {*} actorType
  */
-function fn_sendToAccountGroup(message, isBinary, senderId, accountId, groupId, actorType) {
+function fn_sendToAccountGroup(message, isBinary, senderId, accountId, groupId, actorType, p_msgClass) {
     const account = c_accounts[accountId];
     if (account == null) return false;
     const group = account.m_groups[groupId];
     if (group == null) return false;
 
     if (actorType === 'g') {
-        group.fn_broadcastToGCS(message, isBinary, senderId);
+        group.fn_broadcastToGCS(message, isBinary, senderId, p_msgClass);
     } else if (actorType === 'd') {
-        group.fn_broadcastToDrone(message, isBinary, senderId);
+        group.fn_broadcastToDrone(message, isBinary, senderId, p_msgClass);
     } else {
-        group.fn_broadcast(message, isBinary, senderId);
+        group.fn_broadcast(message, isBinary, senderId, null, p_msgClass);
     }
 
     return true;
 }
 
 
-function fn_sendTIndividualId (message, isBinary, targetId, senderId, groupID, cb) {
+function fn_sendTIndividualId (message, isBinary, targetId, senderId, groupID, cb, p_msgClass) {
     const socket = c_activeSenders.getActiveSender(targetId);
     if (socket && socket.readyState === 1) {
         // Validate sender is in same group as target
         const senderSocket = c_activeSenders.getActiveSender(senderId);
         if (senderSocket?.m__group === socket.m__group) {
-            socket.send(message, { binary: isBinary });
+            c_outboundGuard.fn_safeSend(socket, message, isBinary, p_msgClass);
         } else if (senderSocket === null && groupID !== undefined) {
             // Message from super server - validate using injected groupID
             if (socket.m__group && socket.m__group.m_ID === groupID) {
-                socket.send(message, { binary: isBinary });
+                c_outboundGuard.fn_safeSend(socket, message, isBinary, p_msgClass);
             } else {
                 cb && cb(targetId);
             }
@@ -345,11 +347,15 @@ Group.prototype.forEach = function (callback) {
     Object.values(this.m_units).forEach(callback);
 }
 
-Group.prototype.fn_sendToIndividual = function (message, isbinary, target, onNotFound) {
+Group.prototype.fn_sendToIndividual = function (message, isbinary, target, onNotFound, p_msgClass) {
+    let socket = null;
     try {
-        const socket = this.m_units[target];
+        socket = this.m_units[target];
         if (socket != null) {
-            socket.send(message, { binary: isbinary });
+            const c_result = c_outboundGuard.fn_safeSend(socket, message, isbinary, p_msgClass);
+            if (c_result === c_outboundGuard.RESULT_TERMINATED) {
+                this.fn_handleOrphanSocket(socket);
+            }
         } else {
             onNotFound && onNotFound(target);
         }
@@ -360,15 +366,15 @@ Group.prototype.fn_sendToIndividual = function (message, isbinary, target, onNot
     }
 }
 
-Group.prototype.fn_broadcastToGCS = function (p_message, isbinary, senderID) {
-    this.fn_broadcast(p_message, isbinary, senderID, 'g');
+Group.prototype.fn_broadcastToGCS = function (p_message, isbinary, senderID, p_msgClass) {
+    this.fn_broadcast(p_message, isbinary, senderID, 'g', p_msgClass);
 }
 
-Group.prototype.fn_broadcastToDrone = function (p_message, p_isbinary, senderID) {
-    this.fn_broadcast(p_message, p_isbinary, senderID, 'd');
+Group.prototype.fn_broadcastToDrone = function (p_message, p_isbinary, senderID, p_msgClass) {
+    this.fn_broadcast(p_message, p_isbinary, senderID, 'd', p_msgClass);
 }
 
-Group.prototype.fn_broadcast = function (p_message, p_isbinary, senderID, p_actorType = null) {
+Group.prototype.fn_broadcast = function (p_message, p_isbinary, senderID, p_actorType = null, p_msgClass) {
     // I am using c_ws.m_loginRequest.m_senderID instead of p_message.sd 
     // to prevent sender socket from deceiving the server as m_senderID is recieved from AUTH Server.
     
@@ -378,7 +384,10 @@ Group.prototype.fn_broadcast = function (p_message, p_isbinary, senderID, p_acto
         try {
             if (socket.m_loginRequest.m_senderID !== senderID &&
                 (p_actorType === null || socket.m_loginRequest.m_actorType === p_actorType)) {
-                socket.send(p_message, { binary: p_isbinary });
+                const c_result = c_outboundGuard.fn_safeSend(socket, p_message, p_isbinary, p_msgClass);
+                if (c_result === c_outboundGuard.RESULT_TERMINATED) {
+                    this.fn_handleOrphanSocket(socket);
+                }
             }
         } catch (e) {
             console.log(`broadcast :ws:${socket.name} Orphan socket Error: ${e}`);

@@ -11,6 +11,8 @@ const c_dumpError = require("droneengage_server_common").dumperror;
 const c_CONSTANTS = require("../../js_constants.js");
 
 const c_ChatAccountRooms = require("./js_andruav_chat_account_rooms.js");
+const c_andruav_active_senders = require("./js_andruav_active_senders.js");
+const c_outboundGuard = require("./js_outbound_guard.js");
 const c_PluginManager = require('./pluginManager.js');
 const c_relay = require("./js_chat_relay.js");
 const c_system = require("./js_chat_system_commands.js");
@@ -20,13 +22,13 @@ const forwardExternalMessage = c_relay.forwardExternalMessage;
 const getServerOriginID = c_relay.getServerOriginID;
 
 
-function send_message_toMyGroup(message, isbinary, ws) {
+function send_message_toMyGroup(message, isbinary, ws, p_msgClass) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
     try {
         if (ws.m__group != null) {
-            ws.m__group.fn_broadcast(message, isbinary, ws.m_loginRequest.m_senderID);
+            ws.m__group.fn_broadcast(message, isbinary, ws.m_loginRequest.m_senderID, null, p_msgClass);
         }
     }
     catch (e) {
@@ -36,13 +38,13 @@ function send_message_toMyGroup(message, isbinary, ws) {
 }
 
 
-function send_message_toMyGroup_Agent(message, isbinary, ws) {
+function send_message_toMyGroup_Agent(message, isbinary, ws, p_msgClass) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
     try {
         if (ws.m__group != null) {
-            ws.m__group.fn_broadcastToDrone(message, isbinary, ws.m_loginRequest.m_senderID);
+            ws.m__group.fn_broadcastToDrone(message, isbinary, ws.m_loginRequest.m_senderID, p_msgClass);
         }
     }
     catch (e) {
@@ -52,13 +54,13 @@ function send_message_toMyGroup_Agent(message, isbinary, ws) {
 }
 
 
-function send_message_toMyGroup_GCS(message, isbinary, ws) {
+function send_message_toMyGroup_GCS(message, isbinary, ws, p_msgClass) {
     // This condition hides an error when ws is closed silently.
     // a new instance of ws is created with group = 0 and the  old ws is lost
 
     try {
         if (ws.m__group != null) {
-            ws.m__group.fn_broadcastToGCS(message, isbinary, ws.m_loginRequest.m_senderID);
+            ws.m__group.fn_broadcastToGCS(message, isbinary, ws.m_loginRequest.m_senderID, p_msgClass);
         }
     }
     catch (e) {
@@ -68,10 +70,10 @@ function send_message_toMyGroup_GCS(message, isbinary, ws) {
 }
 
 
-function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
+function send_message_toTarget(message, isbinary, target, ws, onNotFound, p_msgClass) {
     try {
         if (ws.m__group != null) {
-            ws.m__group.fn_sendToIndividual(message, isbinary, target, onNotFound);
+            ws.m__group.fn_sendToIndividual(message, isbinary, target, onNotFound, p_msgClass);
         }
     }
     catch (err) {
@@ -86,15 +88,15 @@ function send_message_toTarget(message, isbinary, target, ws, onNotFound) {
  * Falls back to the legacy all-accounts broadcast when ids are missing or the
  * account/group does not exist locally (backward compatibility).
  */
-function deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, p_actorType, p_fallback) {
+function deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, p_actorType, p_fallback, p_msgClass) {
     if ((v_jmsg._aid !== undefined) && (v_jmsg._gid !== undefined)) {
-        if (c_ChatAccountRooms.fn_sendToAccountGroup(p_message, p_isBinary, senderID, v_jmsg._aid, v_jmsg._gid, p_actorType) === true) {
+        if (c_ChatAccountRooms.fn_sendToAccountGroup(p_message, p_isBinary, senderID, v_jmsg._aid, v_jmsg._gid, p_actorType, p_msgClass) === true) {
             return;
         }
     }
 
     // Legacy fallback: ids absent or account/group not present locally.
-    p_fallback(p_message, p_isBinary, senderID);
+    p_fallback(p_message, p_isBinary, senderID, p_msgClass);
 }
 
 
@@ -134,11 +136,14 @@ function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
         return;
     }
 
+    // Compute the outbound class once for all recipients of this message.
+    const v_msgClass = c_outboundGuard.fn_getMessageClass(v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID]);
+
     //p_message = null;
     switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING]) {
         case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
             // Scoped to the originating account/group (falls back to all on legacy messages)
-            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
+            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll, v_msgClass);
             // RELAY FORWARDING: Broadcast messages propagate in the relay tree
             forwardExternalMessage(p_message, p_isBinary, p_source_ws);
             break;
@@ -158,19 +163,19 @@ function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
                     switch (v_jmsg['tg']) {
                         case c_CONSTANTS.CONST_WS_SENDER_ALL_GCS:
                             // Target is GCS regardless who the sender is means [broadcast] to all GCS.
-                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'g', c_ChatAccountRooms.fn_sendToAllGCS);
+                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'g', c_ChatAccountRooms.fn_sendToAllGCS, v_msgClass);
                             // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                             forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                             break;
                         case c_CONSTANTS.CONST_WS_SENDER_ALL:
                             // Target is _GD_  means [broadcast] to all units including GCS & drones.
-                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
+                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll, v_msgClass);
                             // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                             forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                             break;
                         case c_CONSTANTS.CONST_WS_SENDER_ALL_AGENTS:
                             // Target is _AGN_  means [broadcast] to all drones.
-                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'd', c_ChatAccountRooms.fn_sendToAllAgent);
+                            deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, 'd', c_ChatAccountRooms.fn_sendToAllAgent, v_msgClass);
                             // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                             forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                             break;
@@ -178,7 +183,7 @@ function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
                             // ONE to ONE Message - do NOT propagate in relay tree
                             c_ChatAccountRooms.fn_sendTIndividualId(p_message, p_isBinary, v_jmsg.tg, senderID, v_jmsg._gid, function onNotFound() {
                                 // One-to-one messages are not propagated further
-                            });
+                            }, v_msgClass);
                             break;
                     }
                     break;
@@ -187,7 +192,7 @@ function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
                     // No target specified in external message - broadcast to the originating account/group.
                     // External messages don't have socket context, so we can't determine actor type.
                     // Safe default: send to all units in scope and let them filter.
-                    deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll);
+                    deliverExternalBroadcast(p_message, p_isBinary, senderID, v_jmsg, null, c_ChatAccountRooms.fn_sendToAll, v_msgClass);
                     // RELAY FORWARDING: Broadcast messages propagate in the relay tree
                     forwardExternalMessage(p_message, p_isBinary, p_source_ws);
                 }
@@ -209,6 +214,14 @@ function fn_parseExternalMessage(p_message, p_isBinary, p_source_ws = null) {
  * @param {*} p_isBinary
  */
 function fn_parseMessage(p_ws, p_message, p_isBinary) {
+
+    // Admin-blocked units stay connected but their inbound traffic is silently
+    // dropped before parsing — indistinguishable from a dead link on the
+    // client side. In-memory only; cleared on restart.
+    if ((p_ws.m_loginRequest != null)
+        && c_andruav_active_senders.fn_isSenderBlocked(p_ws.m_loginRequest.m_senderID)) {
+        return;
+    }
 
     let v_jmsg = null;
     let p_message_w_permission = null;
@@ -267,15 +280,18 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
 
     p_message = null;
 
+    // Compute the outbound class once for all recipients of this message.
+    const v_msgClass = c_outboundGuard.fn_getMessageClass(v_jmsg[c_CONSTANTS.CONST_WS_MESSAGE_ID]);
+
     switch (v_jmsg[c_CONSTANTS.CONST_WS_MSG_ROUTING]) {
         case c_CONSTANTS.CONST_WS_MSG_ROUTING_GROUP: // group
             try {
                 // send to group
                 if (p_ws.m_loginRequest.m_actorType == c_CONSTANTS.CONST_ACTOR_TYPE_GCS) {
-                    send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                    send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                 }
                 else {
-                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                    send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                 }
 
                 forwardMessage(p_message_w_permission, p_isBinary, p_ws);
@@ -303,7 +319,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                         case c_CONSTANTS.CONST_WS_SENDER_ALL_GCS:
                             // Target is GCS regardless who the sender is means [broadcast] to all GCS.
                             if (p_ws != null) {
-                                send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                                send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                             }
 
                             forwardMessage(p_message_w_permission, p_isBinary, p_ws);
@@ -312,7 +328,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                         case c_CONSTANTS.CONST_WS_SENDER_ALL:
                             // Target is _GD_  means [broadcast] to all units including GCS & drones.
                             if (p_ws != null) {
-                                send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                                send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                             }
 
                             forwardMessage(p_message_w_permission, p_isBinary, p_ws);
@@ -322,7 +338,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                         case c_CONSTANTS.CONST_WS_SENDER_ALL_AGENTS:
                             // Target is _AGN_  means [broadcast] to all drones.
                             if (p_ws != null) {
-                                send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws);
+                                send_message_toMyGroup_Agent(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                             }
                             forwardMessage(p_message_w_permission, p_isBinary, p_ws);
 
@@ -332,7 +348,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                             if (p_ws != null) {
                                 send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws, function onNotFound() {
                                     forwardMessage(p_message_w_permission, p_isBinary, p_ws);
-                                });
+                                }, v_msgClass);
                             }
                             else {
                                 forwardMessage(p_message_w_permission, p_isBinary, p_ws);
@@ -345,7 +361,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                     // 2- Agent  & (v_jmsg['tg'] == null)
                     if (p_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_DRONE) {
                         // Default broadcast for agents is to GCS only
-                        send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws);
+                        send_message_toMyGroup_GCS(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                         forwardMessage(p_message_w_permission, p_isBinary, p_ws);
                         break;
                     }
@@ -353,7 +369,7 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                         // 3- GCS Logic  & (v_jmsg['tg'] == null)
                         if (p_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_GCS) {
                             // Default broadcast for GCS is to all units.
-                            send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws);
+                            send_message_toMyGroup(p_message_w_permission, p_isBinary, p_ws, v_msgClass);
                             forwardMessage(p_message_w_permission, p_isBinary, p_ws);
                             break;
                         }

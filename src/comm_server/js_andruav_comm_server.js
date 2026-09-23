@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
 const c_dbProxyClient = require("./server_to_server/js_db_proxy_client.js");
 const c_udpProxy = require("./js_udp_proxy.js");
+const c_activeSenders = require("./chat_server/js_andruav_active_senders.js");
 const v_version = require('../../package.json').version;
 
 const CONST_WAIT_PARTY_TO_CONNECT_TIMEOUT = 10000; //60000; //5000;
@@ -205,6 +206,12 @@ function fn_AuthServerMessagesHandler(p_msg) {
                     fn_handleSetUdpProxyState(p_cmd);
                 }
                 break;
+
+            case c_CONSTANTS.CONST_CS_CMD_SET_UNIT_TRAFFIC_STATE:
+                {
+                    fn_handleSetUnitTrafficState(p_cmd);
+                }
+                break;
         }
     }
     catch (ex) {
@@ -252,6 +259,39 @@ function fn_handleSetUdpProxyState(p_cmd) {
         'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
         'd': {
             'proxies': c_udpProxy.fn_getActiveProxiesList(),
+            'name': c_name,
+            'blocked': c_blocked,
+            'applied': c_applied
+        }
+    };
+
+    if (p_cmd.d && p_cmd.d.hasOwnProperty(c_CONSTANTS.CONST_CS_REQUEST_ID.toString())) {
+        c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
+    }
+
+    m_commServerManagerClient.fn_sendMessage(JSON.stringify(c_reply));
+}
+
+/**
+ * Handles an AUTH-server request to block/resume inbound traffic for a named
+ * connected unit (p_cmd.d{name: unit name, blocked: bool}). The unit's socket
+ * stays open but its messages are silently dropped at the routing layer —
+ * in-memory only, so the block is lost on restart. Replies with a
+ * CONST_CS_CMD_REPORT_BLOCKED_UNITS report so AUTH can refresh its view.
+ */
+function fn_handleSetUnitTrafficState(p_cmd) {
+    const c_name = p_cmd.d ? p_cmd.d.name : null;
+    const c_blocked = (p_cmd.d && p_cmd.d.blocked === true);
+    const c_applied = (typeof c_name === 'string') && c_activeSenders.fn_setSenderBlocked(c_name, c_blocked);
+
+    if (!c_applied) {
+        console.log(`[WARN] SET_UNIT_TRAFFIC_STATE for unknown unit '${c_name}'`);
+    }
+
+    const c_reply = {
+        'c': c_CONSTANTS.CONST_CS_CMD_REPORT_BLOCKED_UNITS,
+        'd': {
+            'units': c_activeSenders.fn_getBlockedSenders(),
             'name': c_name,
             'blocked': c_blocked,
             'applied': c_applied
