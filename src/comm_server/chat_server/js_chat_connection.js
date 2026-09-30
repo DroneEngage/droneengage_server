@@ -446,7 +446,7 @@ function send_ok_message(p_ws) {
     const v_jmsg = {
         'ty': 's',
         'mt': c_CONSTANTS.CONST_TYPE_AndruavSystem_ConnectedCommServer,
-        'ms': { s: 'OK:connected:tcp:' + p_ws._socket.remoteAddress + ':' + p_ws._socket.remotePort }
+        'ms': { s: 'OK:connected:tcp:' + p_ws._socket.remoteAddress + ':' + p_ws._socket.remotePort, ts: Date.now() }
     };
 
     p_ws.send(JSON.stringify(v_jmsg));

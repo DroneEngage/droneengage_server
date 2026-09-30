@@ -69,6 +69,42 @@ test('class: unknown mt is must_deliver, configured mt is latest_wins', () => {
 });
 
 
+/**
+ * Phase-4A (TASK-P4A-01 / review A9): the fleet roster (DE_ROSTER 1092)
+ * must be latest_wins in the shipped server.config, while the reliable
+ * coordination types (event, ack, world, op-control) must stay
+ * must_deliver — they can never be coalesced/dropped under backpressure.
+ * Reads the real server.config so a config regression fails the test.
+ */
+test('Phase-4A message classes in shipped server.config', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const stripJsonComments = require('droneengage_server_common').helpers.stripJsonComments;
+    const c_msgs = require('../../src/comm_server/js_andruavMessages.js');
+
+    const c_raw = fs.readFileSync(path.join(__dirname, '../../server.config'), 'utf8');
+    const c_shipped = JSON.parse(stripJsonComments(c_raw));
+
+    installFakeGlobals({ outbound_guard: c_shipped.outbound_guard });
+    c_guard.fn_reloadConfig();
+    try {
+        assert.equal(
+            c_guard.fn_getMessageClass(c_msgs.CONST_TYPE_AndruavMessage_DE_Roster),
+            c_guard.CLASS_LATEST_WINS);
+        for (const mt of [
+            c_msgs.CONST_TYPE_AndruavMessage_DE_Event,
+            c_msgs.CONST_TYPE_AndruavMessage_DE_Event_Ack,
+            c_msgs.CONST_TYPE_AndruavMessage_DE_World,
+            c_msgs.CONST_TYPE_AndruavMessage_DE_Op_Control]) {
+            assert.equal(c_guard.fn_getMessageClass(mt), c_guard.CLASS_MUST_DELIVER,
+                `mt ${mt} must stay must_deliver`);
+        }
+    } finally {
+        teardown();
+    }
+});
+
+
 test('below high water: both classes are sent', () => {
     setup();
     try {

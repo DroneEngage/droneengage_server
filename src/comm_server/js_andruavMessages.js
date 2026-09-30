@@ -63,6 +63,14 @@ const AndruavMessageTypes = {
     CONST_TYPE_AndruavMessage_UdpProxy_Info: 1071,
     CONST_TYPE_AndruavMessage_Unit_Name: 1072,
 
+    // Phase-4A coordination fabric (TASK-P4A-01) — wire formats are
+    // normative in Tasks/mission_planner/Phase-4A-Tasks/PROTOCOL.md
+    CONST_TYPE_AndruavMessage_DE_Event: 1090,
+    CONST_TYPE_AndruavMessage_DE_Event_Ack: 1091,
+    CONST_TYPE_AndruavMessage_DE_Roster: 1092,
+    CONST_TYPE_AndruavMessage_DE_World: 1093,
+    CONST_TYPE_AndruavMessage_DE_Op_Control: 1094,
+
 
     // Binary Messages
     CONST_TYPE_AndruavMessage_LightTelemetry: 2022,

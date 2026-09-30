@@ -73,6 +73,9 @@ function onSystemMessage(v_jmsg, p_ws) {
 
             case c_CONSTANTS.CONST_TYPE_AndruavSystem_Ping:
                 v_jmsg.ms.s = 'OK:pong';
+                // CLOCK.md T2: stamp the server clock so units can sync their
+                // internal fleet clock (min-RTT burst, offset = ts - rx mid).
+                v_jmsg.ms.ts = Date.now();
                 p_ws.send(JSON.stringify(v_jmsg));
                 break;
 
