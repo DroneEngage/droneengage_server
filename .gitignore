@@ -27,3 +27,8 @@ build/
 server.config.local
 
 .playwright-mcp/
+*.local.sh
+
+# standalone test build outputs
+src/test/test_sv_core
+src/test/*.o

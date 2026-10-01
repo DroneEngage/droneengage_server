@@ -347,7 +347,8 @@ function fn_handleLoadMission(v_jmsg, p_ws) {
     c_dumpError.fn_dumpdebug("load mission command");
     const mms = fn_parseMessageBody(v_jmsg);
 
-    if ((mms.unitId == null) || (mms.unitId.length == 0)) {
+    // P1F-01: metadata listing ({list:true}) is account-wide — unitId optional.
+    if ((mms.list !== true) && ((mms.unitId == null) || (mms.unitId.length == 0))) {
         return;
     }
     // Use account ID from login request for scoping - prevents cross-account access
@@ -359,7 +360,8 @@ function fn_handleLoadMission(v_jmsg, p_ws) {
     c_dumpError.fn_dumpdebug(mms);
 
     if (c_dbProxyClient.fn_isConnected()) {
-        c_dbProxyClient.fn_loadMission(mms.unitId, c_accountId, mms.missionId)
+        c_dbProxyClient.fn_loadMission(mms.unitId, c_accountId, mms.missionId,
+            { list: mms.list, kind: mms.kind, before: mms.before, rq: mms.rq })
             .then(function (p_response) {
                 if ((p_response.success !== true) || (p_response.ms == null)) return;
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
@@ -407,14 +409,18 @@ function fn_handleSaveMission(v_jmsg, p_ws) {
     c_dumpError.fn_dumpdebug(mms);
 
     if (c_dbProxyClient.fn_isConnected()) {
-        c_dbProxyClient.fn_saveMission(mms.unitId, c_accountId, mms.missionId, mms.name, mms.data)
+        c_dbProxyClient.fn_saveMission(mms.unitId, c_accountId, mms.missionId, mms.name, mms.data,
+            { kind: mms.kind, meta: mms.meta, rq: mms.rq })
             .then(function (p_response) {
-                if (p_response.success !== true) return;
+                // Forward the storage reply verbatim: on success it carries
+                // {s:'OK:save', missionId, version, kind, rq}; on failure the
+                // server's own error text ({s:'ERROR:...'}) so the client can
+                // show quota/kind/size rejections.
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                 v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_SaveMission;
-                v_jmsg.ms = "Done";
+                v_jmsg.ms = (p_response.ms != null) ? p_response.ms : "Done";
                 p_ws.send(JSON.stringify(v_jmsg));
             })
             .catch(function (err) {

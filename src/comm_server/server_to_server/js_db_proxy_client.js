@@ -392,9 +392,10 @@ function fn_sendRequest(p_mt, p_ms) {
  * @param {string} p_unitId - Unit ID
  * @param {string} p_accountId - Account ID (team ID) for scoping
  * @param {string} p_missionId - Optional mission ID (if null, loads all missions for unit)
+ * @param {object} [p_opts] - Optional P1F-01 fields: {list, kind, before, rq}
  * @returns {Promise} Resolves with response envelope
  */
-function fn_loadMission(p_unitId, p_accountId, p_missionId = null) {
+function fn_loadMission(p_unitId, p_accountId, p_missionId = null, p_opts = null) {
     const c_CONST_TYPE_AndruavSystem_LoadMission = 9010;
     const payload = {
         unitId: p_unitId,
@@ -403,6 +404,13 @@ function fn_loadMission(p_unitId, p_accountId, p_missionId = null) {
     if (p_missionId) {
         payload.missionId = p_missionId;
     }
+    if (p_opts != null) {
+        // Forward the P1F-01 list/paging fields and the rq echo id unchanged.
+        if (p_opts.list === true) payload.list = true;
+        if (p_opts.kind != null) payload.kind = p_opts.kind;
+        if (p_opts.before != null) payload.before = p_opts.before;
+        if (p_opts.rq != null) payload.rq = p_opts.rq;
+    }
     return fn_sendRequest(c_CONST_TYPE_AndruavSystem_LoadMission, payload);
 }
 
@@ -410,12 +418,13 @@ function fn_loadMission(p_unitId, p_accountId, p_missionId = null) {
  * Save mission to storage server.
  * @param {string} p_unitId - Unit ID
  * @param {string} p_accountId - Account ID (team ID) for scoping
- * @param {string} p_missionId - Mission ID
+ * @param {string} p_missionId - Mission ID (may be null — the storage server generates a UUID)
  * @param {string} p_name - Mission name
  * @param {object} p_data - Mission data (DE format JSON)
+ * @param {object} [p_opts] - Optional P1F-01 fields: {kind, meta, rq}
  * @returns {Promise} Resolves with response envelope
  */
-function fn_saveMission(p_unitId, p_accountId, p_missionId, p_name, p_data) {
+function fn_saveMission(p_unitId, p_accountId, p_missionId, p_name, p_data, p_opts = null) {
     const c_CONST_TYPE_AndruavSystem_SaveMission = 9011;
     const payload = {
         unitId: p_unitId,
@@ -424,6 +433,11 @@ function fn_saveMission(p_unitId, p_accountId, p_missionId, p_name, p_data) {
         name: p_name,
         data: p_data
     };
+    if (p_opts != null) {
+        if (p_opts.kind != null) payload.kind = p_opts.kind;
+        if (p_opts.meta != null) payload.meta = p_opts.meta;
+        if (p_opts.rq != null) payload.rq = p_opts.rq;
+    }
     return fn_sendRequest(c_CONST_TYPE_AndruavSystem_SaveMission, payload);
 }
 
