@@ -345,6 +345,14 @@ function fn_parseMessage(p_ws, p_message, p_isBinary) {
                             break;
                         default:
                             // ONE to ONE Message
+                            // TASK-P4A-09: a message for an offline/absent unit
+                            // is dropped (relayed), never stored for later. The
+                            // fleet-coordination types 1090/1091/1092/1093/1094
+                            // (DE_EVENT/ACK/ROSTER/WORLD/OP_CONTROL) must never
+                            // be queued for offline delivery - a replayed
+                            // PREPARE/START or stale event could corrupt a run.
+                            // The matching hard guard lives in the storage
+                            // server's offlineQueue.enqueue.
                             if (p_ws != null) {
                                 send_message_toTarget(p_message_w_permission, p_isBinary, v_jmsg.tg, p_ws, function onNotFound() {
                                     forwardMessage(p_message_w_permission, p_isBinary, p_ws);
