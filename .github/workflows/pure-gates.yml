@@ -1,0 +1,26 @@
+# pure-gates - every push, pure logic only.
+#
+#   tests    `node --test test/unit/**/*.test.js` - the unit suite,
+#            in-process. Integration scripts under test/ that need a
+#            live comm server are NOT part of the gate.
+#
+# No servers, no SITL, no sim bring-up.
+name: pure-gates
+on: [push, pull_request]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: install
+        run: npm ci --no-audit --no-fund
+
+      - name: unit tests
+        run: npm test
