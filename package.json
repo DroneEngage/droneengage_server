@@ -38,6 +38,6 @@
     "udp-packet": "^2.0.0",
     "uuid": "^9.0.0",
     "ws": "^8.16.0",
-    "droneengage_server_common": "git+ssh://git@github.com:DroneEngage/droneengage_server_common.git#v1.0.0"
+    "droneengage_server_common": "git+ssh://git@github.com:DroneEngage/droneengage_server_common.git#v1.0.1"
   }
 }
