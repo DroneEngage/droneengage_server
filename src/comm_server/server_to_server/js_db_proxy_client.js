@@ -66,32 +66,35 @@ function fn_onOpen() {
     m_connectionState = CONST_CONNECTION_STATE.CONNECTING;
     fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTING, null, true);
 
-    // If storage server doesn't send S2S challenge within 2 seconds, assume no auth required
+    // Fail closed: if the storage server does not complete the S2S handshake
+    // within the timeout, drop the connection — a peer that never challenges
+    // is not trusted (replaces the old "no challenge -> authenticated" path).
     if (m_s2sAuthTimer) {
         clearTimeout(m_s2sAuthTimer);
     }
     m_s2sAuthTimer = setTimeout(() => {
         if (!m_authenticated && m_ws && m_ws.readyState === WebSocket.OPEN) {
-            console.log(`${global.Colors.FgYellow}[INFO] DBProxyClient: No S2S challenge received, assuming no auth required${global.Colors.Reset}`);
-            m_authenticated = true;
-            m_connectionState = CONST_CONNECTION_STATE.CONNECTED;
-            fn_sendStorageStatus(CONST_CONNECTION_STATE.CONNECTED, null, true);
-            fn_startHeartbeat();
+            console.error(`${global.Colors.Error}ATTENTION!! DBProxyClient: S2S auth not completed within ${c_s2s_auth.CONST_S2S_AUTH_HANDSHAKE_TIMEOUT}ms — closing connection (fail closed)${global.Colors.Reset}`);
+            m_ws.close();
         }
-    }, 2000);
+    }, c_s2s_auth.CONST_S2S_AUTH_HANDSHAKE_TIMEOUT);
 }
 
 function fn_onMessage(data) {
     const c_env = c_s2s_auth.fn_parseEnvelope(data);
     if (c_env != null) {
         if ((c_env.s2s_auth === c_s2s_auth.CONST_S2S_AUTH_CHALLENGE) && (m_ws != null)) {
-            // Clear the timeout since we received a challenge
-            if (m_s2sAuthTimer) {
-                clearTimeout(m_s2sAuthTimer);
-                m_s2sAuthTimer = null;
-            }
             try {
-                m_ws.send(c_s2s_auth.fn_buildResponse(c_env.nonce, global.m_serverconfig.m_configuration.server_id));
+                // The challenge 'method' field tells us which credential the
+                // accepting side expects; absent (older servers) means Ed25519 —
+                // the only mode those servers support.
+                const c_serverId = global.m_serverconfig.m_configuration.server_id;
+                if (c_env.method === c_s2s_auth.CONST_S2S_AUTH_METHOD_HMAC) {
+                    m_ws.send(c_s2s_auth.fn_buildHmacResponse(c_env.nonce, c_serverId));
+                }
+                else {
+                    m_ws.send(c_s2s_auth.fn_buildResponse(c_env.nonce, c_serverId));
+                }
             }
             catch (ex) {
                 console.error(`${global.Colors.Error}ATTENTION!! DBProxyClient S2S handshake failed: ${ex}${global.Colors.Reset}`);
