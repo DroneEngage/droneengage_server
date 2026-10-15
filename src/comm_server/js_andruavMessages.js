@@ -80,6 +80,10 @@ const AndruavMessageTypes = {
     CONST_TYPE_AndruavBinaryMessage_ServoOutput: 6501,
     CONST_TYPE_AndruavBinaryMessage_Mavlink: 6502,
 
+    // per-frame AI observations (intermodule only; replaces
+    // AI_Recognition_TargetLocation 1078)
+    CONST_TYPE_AndruavMessage_AI_OBSERVATIONS: 6546,
+
     // System Messages
     CONST_TYPE_AndruavSystem_LoadMission: 9010,
     CONST_TYPE_AndruavSystem_SaveMission: 9011,
