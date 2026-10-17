@@ -363,12 +363,16 @@ function fn_handleLoadMission(v_jmsg, p_ws) {
         c_dbProxyClient.fn_loadMission(mms.unitId, c_accountId, mms.missionId,
             { list: mms.list, kind: mms.kind, before: mms.before, rq: mms.rq })
             .then(function (p_response) {
-                if ((p_response.success !== true) || (p_response.ms == null)) return;
+                // Forward the storage reply verbatim — the same contract the
+                // save path keeps: on failure ms carries {s:'ERROR:...'}, and
+                // an absent ms still answers the client so it never hangs.
                 v_jmsg.ty = c_CONSTANTS.CONST_WS_MSG_ROUTING_SYSTEM;
                 v_jmsg.tg = p_ws.name;
                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                 v_jmsg.mt = c_CONSTANTS.CONST_TYPE_AndruavSystem_LoadMission;
-                v_jmsg.ms = p_response.ms;
+                v_jmsg.ms = (p_response != null && p_response.ms != null)
+                    ? p_response.ms
+                    : "Error: storage returned no payload";
                 p_ws.send(JSON.stringify(v_jmsg));
             })
             .catch(function (err) {
