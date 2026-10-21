@@ -304,9 +304,7 @@ function fn_onConnect_Handler(p_ws, p_req) {
         }
         else {
 
-            fn_validateKey(c_params);
-
-            if (v_loginTempKey != null) {
+            if (fn_validateKey(c_params) === true) {
                 // OK THIS IS A VALID LOGIN... Lets' get him in the right chat room and send a welcome reply.
 
                 acceptConnection(v_loginTempKey, c_params, p_ws);

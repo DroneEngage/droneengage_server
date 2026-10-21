@@ -106,7 +106,7 @@ class ParentCommServer {
           return;
         }
 
-        console.log (`SUPER SRV RX:: ${p_msg}`);
+        if (global.DEBUG_LOGGING) console.log (`SUPER SRV RX:: ${p_msg}`);
         let v_isBinary = false;
         if (typeof (p_msg) !== 'string') {
                 v_isBinary = true;

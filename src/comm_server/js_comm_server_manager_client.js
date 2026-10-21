@@ -99,7 +99,7 @@ function fn_flushQueue() {
 function fn_sendMessage(p_message) {
     if (m_ws && m_ws.readyState === m_ws.OPEN) {
         m_ws.send(p_message);
-    } else if (m_ws || m_messageQueue.length < 1000) {
+    } else if (m_messageQueue.length < 1000) {
         m_messageQueue.push(p_message);
     }
 }

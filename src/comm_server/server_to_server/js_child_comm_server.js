@@ -73,7 +73,7 @@ class ChildCommServer {
         return;
       }
 
-      console.log(`CHILD RX: ${message}`);
+      if (global.DEBUG_LOGGING) console.log(`CHILD RX: ${message}`);
       let v_isBinary = false;
       if (typeof (message) !== 'string') {
         v_isBinary = true;

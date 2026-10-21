@@ -61,7 +61,9 @@ function fn_cancelLoginRequestBySenderID(p_requestID) {
         const c_LoginRequest = m_waitingAccounts[c_keys[i]];
         if (c_LoginRequest[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] == p_requestID) {
             delete m_waitingAccounts[c_keys[i]];
-            c_CommServerManagerClient.fn_updateAuthServer();
+            if (m_commServerManagerClient.fn_updateAuthServer) {
+                m_commServerManagerClient.fn_updateAuthServer();
+            }
             return;
         }
     }
@@ -384,6 +386,7 @@ module.exports = {
     fn_startServer: fn_startServer,
     fn_addWaitingAccount: fn_addWaitingAccount,
     fn_generateLoginRequestReply: fn_generateLoginRequestReply,
+    fn_cancelLoginRequestBySenderID: fn_cancelLoginRequestBySenderID,
     isLoginExist: isLoginExist,
     getLogin: getLogin,
     deleteLogin: deleteLogin
