@@ -176,6 +176,56 @@ The DBProxyClient handles:
 
 SSL is independent of S2S certificate authentication - similar to the AUTH <--> CommServer pattern. The storage server has its own SSL configuration.
 
+### UDP Relay Server
+
+By default, the comm server hosts the UDP proxy itself (`js_udp_proxy.js`).
+This is the 9008 port pair that relays MAVLink between a drone's de_mavlink
+and a third-party GCS such as QGroundControl or Mission Planner.
+
+When `udp_relay` lists one or more standalone relay servers
+(`droneengage_udp_relay_server`; design in
+[wiki/UdpRelayServer.md](wiki/UdpRelayServer.md)), the comm server becomes a
+broker. It asks a relay for the pair and replies to the unit with the relay's
+sockets in the same 9008 shape. Without `udp_relay`, nothing changes.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `udp_relay` | `[]` | relays as `[{ "host", "port", "id" }]`; absent or `[]` = built-in proxy |
+| `udp_relay_select` | `"hash"` | which relay a unit goes to: `hash` (stable per account/unit), `first_healthy` (list order) or `least_loaded` (fewest pairs) |
+| `udp_relay_fallback` | `"none"` | when no relay is reachable: `none` = the unit gets `en:false`, then an unsolicited `en:true` once a relay is back; `builtin` = serve it from the built-in proxy |
+| `udp_relay_pending_s` | `30` | how long a request is held while relays reconnect, before the fallback applies |
+| `udp_relay_failover_s` | `120` | a relay down this long has its units moved to another relay; match the relays' `owner_grace_s` |
+| `trust_proxy_header` | `false` | `true` only behind a reverse proxy: a party's IP (fed to the relay's GCS allowlist) is then the first `X-Forwarded-For` entry |
+
+```json
+"udp_relay": [{ "host": "127.0.0.1", "port": 9100, "id": "DE_UdpRelay_1" }]
+```
+
+The link to the relay uses the same S2S handshake as the storage server. If
+the relay runs `s2s_cert_enabled: false`, it uses the shared secret from
+`s2s_shared_secret_file` / `de_s2s_shared_secret`, which must equal the
+relay's secret. Otherwise it uses Ed25519 with `s2s_my_private_key`, and the
+relay lists this `server_id` in its `s2s_trusted_server_keys`. Self-signed
+relay certificates are accepted, as on the storage link.
+
+What the broker does:
+- **Unit disconnect:** the relay is told `unit_offline`, and the pair idles
+  out there. A quick reconnect keeps the same ports.
+- **Relay pushes:** `closed` becomes 9008 `en:false` to the unit. `changed`
+  (for example after a relay restart without free ports) becomes an
+  unsolicited 9008 `en:true`.
+- **GCS pinning:** relay pairs only accept GCSes from the unit's
+  account+group (their IPs are sent to the relay). A GCS manages the pin with
+  system message **9021** (`UdpProxyPeer`) `{tg_unit, act: allow|reset|query}`.
+  `allow` and `reset` need `PERMISSION_ALLOW_GCS_FULL_CONTROL`.
+- **AUTH dashboard:** `e` lists relay pairs next to built-in ones, with
+  `account`, `owner` and `relay_id`. `g` blocks on the relay. A new `j`
+  `UDP_RELAY_STATUS` reports each relay link on connect, on change and
+  every 30 s.
+
+The kernel UDP buffer check runs only while this process can host the
+built-in proxy: with no `udp_relay`, or with `udp_relay_fallback: builtin`.
+
 ## Running the Server
 
 ### Development
