@@ -105,16 +105,17 @@ test('same unit name in two accounts gets two pairs; closing one leaves the othe
 
 
 /**
- * Calls the AUTH `g` handler and returns its REPORT_UDP_PROXIES reply.
+ * Calls the AUTH `g` handler and returns its REPORT_UDP_PROXIES reply
+ * (awaited, so it also works once the handler is async with udp_relay).
  */
-function fn_g(p_d) {
+async function fn_g(p_d) {
     const c_manager = require('../../src/comm_server/js_comm_server_manager_client.js');
     const c_commServer = require('../../src/comm_server/js_andruav_comm_server.js');
     const c_orig = c_manager.fn_sendMessage;
     const c_sent = [];
     c_manager.fn_sendMessage = function (p_msg) { c_sent.push(JSON.parse(p_msg)); };
     try {
-        c_commServer.fn_handleSetUdpProxyState({ c: 'g', d: p_d });
+        await c_commServer.fn_handleSetUdpProxyState({ c: 'g', d: p_d });
     } finally {
         c_manager.fn_sendMessage = c_orig;
     }
@@ -133,7 +134,7 @@ test('g with {name, account} blocks only that account\'s pair; rows carry accoun
         fn_9008(c_b, true);
         assert.ok(await fn_waitFor(function () { return c_a.sent.length === 1 && c_b.sent.length === 1; }));
 
-        const c_reply = fn_g({ name: 'drone2', account: 'accB', blocked: true, r: 'rq1' });
+        const c_reply = await fn_g({ name: 'drone2', account: 'accB', blocked: true, r: 'rq1' });
         assert.strictEqual(c_reply.applied, true);
         assert.strictEqual(c_reply.account, 'accB');
         assert.strictEqual(c_reply.r, 'rq1');
@@ -142,7 +143,7 @@ test('g with {name, account} blocks only that account\'s pair; rows carry accoun
         assert.deepStrictEqual(c_byAccount, { accA: false, accB: true });
 
         // unknown account -> nothing applied
-        assert.strictEqual(fn_g({ name: 'drone2', account: 'accC', blocked: true }).applied, false);
+        assert.strictEqual((await fn_g({ name: 'drone2', account: 'accC', blocked: true })).applied, false);
     } finally {
         fn_teardown([['drone2', 'accA'], ['drone2', 'accB']]);
     }
@@ -160,12 +161,12 @@ test('g with only a name that exists in two accounts blocks neither (applied:fal
         fn_9008(c_solo, true);
         assert.ok(await fn_waitFor(function () { return c_a.sent.length === 1 && c_b.sent.length === 1 && c_solo.sent.length === 1; }));
 
-        const c_ambiguous = fn_g({ name: 'drone3', blocked: true });
+        const c_ambiguous = await fn_g({ name: 'drone3', blocked: true });
         assert.strictEqual(c_ambiguous.applied, false);
         assert.ok(fn_rows('drone3').every(function (r) { return r.blocked === false; }));
 
         // single-account behaviour unchanged: a name alone blocks its one pair
-        const c_unique = fn_g({ name: 'solo', blocked: true });
+        const c_unique = await fn_g({ name: 'solo', blocked: true });
         assert.strictEqual(c_unique.applied, true);
         assert.strictEqual(fn_rows('solo')[0].blocked, true);
     } finally {
