@@ -237,7 +237,8 @@ function fn_onConnect_Handler(p_ws, p_req) {
 
             // Clean up any UDP proxy owned by this unit so it is not left orphaned.
             if (v_unitName != null) {
-                c_udp.closeUDPSocket(v_unitName, function () {});
+                c_udp.closeUDPSocket(v_unitName, function () {},
+                    (p_ws.m_loginRequest != null) ? p_ws.m_loginRequest.m_accountID : undefined);
             }
 
             // remove from active senderIDs list and notify auth server.

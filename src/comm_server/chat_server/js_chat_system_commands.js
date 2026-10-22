@@ -37,6 +37,8 @@ function onSystemMessage(v_jmsg, p_ws) {
                         v_jmsg.ms.socket2.port = 0;
                     }
 
+                    // pairs are per account: same-named units in two accounts must not share one
+                    const c_account = p_ws.m_loginRequest.m_accountID;
                     udp.getUDPSocket(p_ws.name, v_jmsg.ms.socket1, v_jmsg.ms.socket2, function (ms) {
                         if (ms.en === false) {
                             v_jmsg.ms.socket1.port = 0;
@@ -48,7 +50,7 @@ function onSystemMessage(v_jmsg, p_ws) {
                                 v_jmsg.tg = p_ws.name; // sender = target
                                 v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                                 p_ws.send(JSON.stringify(v_jmsg));
-                            });
+                            }, c_account);
 
 
                         } else {
@@ -58,7 +60,7 @@ function onSystemMessage(v_jmsg, p_ws) {
                             v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                             p_ws.send(JSON.stringify(v_jmsg));
                         }
-                    });
+                    }, c_account);
                 } else
                     if (v_jmsg.ms.en === false) {
                         udp.closeUDPSocket(p_ws.name, function (ms) {
@@ -67,7 +69,7 @@ function onSystemMessage(v_jmsg, p_ws) {
                             v_jmsg.tg = p_ws.name; // sender = target
                             v_jmsg.sd = c_CONSTANTS.CONST_WS_SENDER_COMM_SERVER;
                             p_ws.send(JSON.stringify(v_jmsg));
-                        });
+                        }, p_ws.m_loginRequest.m_accountID);
                     }
                 break;
 

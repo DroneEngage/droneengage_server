@@ -244,14 +244,18 @@ function fn_handleQueryUdpProxies(p_cmd) {
 
 /**
  * Handles an AUTH-server request to block/resume packet forwarding on a named
- * UDP proxy (p_cmd.d{name: unit/proxy name, blocked: bool}). The block is
- * in-memory only and silently drops packets. Replies with the same
- * CONST_CS_CMD_REPORT_UDP_PROXIES report shape so AUTH can refresh its view.
+ * UDP proxy (p_cmd.d{name: unit/proxy name, blocked: bool, account?}). Pairs
+ * are per account: with `account` only that pair is touched; with only
+ * `name` the single pair of that name, or none (applied:false) when several
+ * accounts have one. The block is in-memory only and silently drops
+ * packets. Replies with the same CONST_CS_CMD_REPORT_UDP_PROXIES report
+ * shape so AUTH can refresh its view.
  */
 function fn_handleSetUdpProxyState(p_cmd) {
     const c_name = p_cmd.d ? p_cmd.d.name : null;
     const c_blocked = (p_cmd.d && p_cmd.d.blocked === true);
-    const c_applied = (typeof c_name === 'string') && c_udpProxy.fn_setProxyBlocked(c_name, c_blocked);
+    const c_account = p_cmd.d ? p_cmd.d.account : undefined;
+    const c_applied = (typeof c_name === 'string') && c_udpProxy.fn_setProxyBlocked(c_name, c_blocked, c_account);
 
     if (!c_applied) {
         console.log(`[WARN] SET_UDP_PROXY_STATE for unknown proxy '${c_name}'`);
@@ -266,6 +270,7 @@ function fn_handleSetUdpProxyState(p_cmd) {
             'applied': c_applied
         }
     };
+    if (c_account != null) c_reply.d.account = c_account;
 
     if (p_cmd.d && p_cmd.d.hasOwnProperty(c_CONSTANTS.CONST_CS_REQUEST_ID.toString())) {
         c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
@@ -384,6 +389,7 @@ function fn_startServer() {
 
 module.exports = {
     fn_startServer: fn_startServer,
+    fn_handleSetUdpProxyState: fn_handleSetUdpProxyState,
     fn_addWaitingAccount: fn_addWaitingAccount,
     fn_generateLoginRequestReply: fn_generateLoginRequestReply,
     fn_cancelLoginRequestBySenderID: fn_cancelLoginRequestBySenderID,
