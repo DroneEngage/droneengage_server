@@ -17,6 +17,7 @@ const c_andruav_comm_server = require("../js_andruav_comm_server.js");
 const c_andruav_active_senders = require("./js_andruav_active_senders.js");
 const c_routing = require("./js_chat_routing.js");
 const c_udp = require("../js_udp_proxy.js");
+const c_udpRelay = require("../server_to_server/js_udp_relay_client.js");
 
 
 function getHeaderParams(url) {
@@ -238,6 +239,13 @@ function fn_onConnect_Handler(p_ws, p_req) {
             // Clean up any UDP proxy owned by this unit so it is not left orphaned.
             if (v_unitName != null) {
                 c_udp.closeUDPSocket(v_unitName, function () {});
+            }
+
+            // A relay-hosted pair is not closed: the relay is told the unit is
+            // offline and closes the pair after idle_timeout_s without traffic,
+            // so a quick reconnect keeps its ports.
+            if (c_udpRelay.fn_isEnabled()) {
+                c_udpRelay.fn_onUnitDisconnected(p_ws);
             }
 
             // remove from active senderIDs list and notify auth server.

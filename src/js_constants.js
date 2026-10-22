@@ -25,6 +25,7 @@ exports.CONST_CS_CMD_REPORT_UDP_PROXIES         = 'f';   // CommServer -> AUTH: 
 exports.CONST_CS_CMD_SET_UDP_PROXY_STATE        = 'g';   // AUTH -> CommServer: block/resume packet forwarding on a named UDP proxy
 exports.CONST_CS_CMD_SET_UNIT_TRAFFIC_STATE     = 'h';   // AUTH -> CommServer: block/resume inbound traffic for a named connected unit
 exports.CONST_CS_CMD_REPORT_BLOCKED_UNITS       = 'i';   // CommServer -> AUTH: reply with list of currently-blocked unit names
+exports.CONST_CS_CMD_UDP_RELAY_STATUS           = 'j';   // CommServer -> AUTH: UDP relay connection status (same state codes as STORAGE_STATUS)
 
 exports.CONST_CS_ACCOUNT_ID                     = 'a';
 exports.CONST_CS_GROUP_ID                       = 'b';
