@@ -2,6 +2,25 @@
 
 Major changes to the DroneEngage main signaling (communication) server, newest first.
 
+## [Unreleased]
+
+- **UDP relay server support.** With `udp_relay` configured, 9008 requests
+  are brokered to one or more standalone relay servers over an
+  S2S-authenticated wss link, instead of the built-in UDP proxy:
+  - Relays are chosen per unit with `udp_relay_select` (`hash`,
+    `first_healthy` or `least_loaded`).
+  - Units fail over after `udp_relay_failover_s`.
+  - `udp_relay_fallback` (`none` or `builtin`) and `udp_relay_pending_s`
+    apply while no relay is reachable.
+  - Without `udp_relay`, nothing changes.
+- New system message **9021 `UdpProxyPeer`**: a GCS can allow its IP, reset
+  or query a relay pair's GCS-side pin.
+- GCS IPs are fed to the relay's allowlist. The new `trust_proxy_header`
+  takes the IP from `X-Forwarded-For` behind a reverse proxy.
+- The AUTH dashboard lists relay pairs with their account, owner and relay
+  (`e`). Block (`g`) works on relay pairs. A new `j UDP_RELAY_STATUS`
+  heartbeat reports each relay link.
+
 ## [5.6.2] - 2026-09-15
 
 - Added UDP proxy block/resume control driven from the AUTH dashboard.
