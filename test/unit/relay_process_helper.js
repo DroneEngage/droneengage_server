@@ -8,8 +8,9 @@
  * droneengage_udp_relay_server / droneengage_udp_proxy (next to this repo or
  * one level up, for worktrees); tests skip with CONST_SKIP_RELAY otherwise.
  * The spawned relay uses the relay repo's RelayPairs + ControlServer with a
- * policy hook that wraps the default GCS policy and returns tk (echoing cap)
- * when the request advertises cap:['tk']. stdin commands: `close <account> <unit>`, `list`.
+ * policy hook that wraps the default policy (GCS pinning, without the unit
+ * token) and returns a fake tk 'TK-<unit>' (echoing cap) when the request
+ * advertises cap:['tk']. stdin commands: `close <account> <unit>`, `list`.
  */
 
 const assert = require('node:assert');
@@ -86,7 +87,10 @@ try { fn_gcsPolicy = require(path.join(dir, 'src/gcs_policy.js')).fn_createGcsPo
 const pairs = new RelayPairs(cfg, {
     hookFactory: function (ctx, opts) {
         const tk = Array.isArray(opts.cap) && opts.cap.includes('tk');
-        const policy = fn_gcsPolicy ? fn_gcsPolicy(ctx, opts, cfg) : {
+        // cap is kept away from the real policy: these comm-server tests use a
+        // fake tk and no DEU1 hellos, so socket1 stays last-sender (token
+        // pinning is tested in the relay repo)
+        const policy = fn_gcsPolicy ? fn_gcsPolicy(ctx, Object.assign({}, opts, { cap: undefined }), cfg) : {
             hook: function (side, rinfo) { ctx.setPeer(side, rinfo); return 'forward'; }
         };
         policy.reply = tk ? { tk: 'TK-' + ctx.unit, cap_seen: opts.cap } : {};
