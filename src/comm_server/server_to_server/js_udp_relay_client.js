@@ -1050,7 +1050,7 @@ async function fn_listRelay(p_relay) {
     if (v_rep.success !== true || !v_rep.ms || !Array.isArray(v_rep.ms.pairs)) return [];
     const c_me = fn_cfg().server_id;
     return v_rep.ms.pairs.filter(function (p_row) { return p_row.owner === c_me; }).map(function (p_row) {
-        return {
+        const c_row = {
             name: p_row.unit,
             account: p_row.account,
             group: p_row.group,
@@ -1067,6 +1067,9 @@ async function fn_listRelay(p_relay) {
             tx: p_row.tx,
             m_relay: p_relay
         };
+        // forward the GCS/unit pin state so the AUTH dashboard can show it
+        if (p_row.pinned != null) c_row.pinned = p_row.pinned;
+        return c_row;
     });
 }
 
@@ -1151,5 +1154,6 @@ module.exports = {
     fn_onGcsJoined,
     fn_handleGcsPeerRequest,
     fn_getRelayProxiesList,
-    fn_setRelayProxyBlocked
+    fn_setRelayProxyBlocked,
+    fn_listRelay
 };
