@@ -17,6 +17,7 @@ const c_andruav_comm_server = require("../js_andruav_comm_server.js");
 const c_andruav_active_senders = require("./js_andruav_active_senders.js");
 const c_routing = require("./js_chat_routing.js");
 const c_udp = require("../js_udp_proxy.js");
+const c_udpRelay = require("../server_to_server/js_udp_relay_client.js");
 
 
 function getHeaderParams(url) {
@@ -33,6 +34,32 @@ function getHeaderParams(url) {
 }
 
 
+/**
+ * The party's IP as the UDP relay's GCS allowlist should see it: the first
+ * X-Forwarded-For entry when trust_proxy_header is true (server behind a
+ * reverse proxy), else the socket's remote address. IPv4-mapped IPv6
+ * (the server listens on "::") is reduced to IPv4.
+ * @param {*} p_req the HTTP upgrade request
+ * @returns {string|null}
+ */
+function fn_getClientIp(p_req) {
+    let v_ip = null;
+    if ((global.m_serverconfig.m_configuration.trust_proxy_header === true) && p_req && p_req.headers) {
+        const c_xff = p_req.headers['x-forwarded-for'];
+        if ((typeof c_xff === 'string') && (c_xff.length > 0)) {
+            v_ip = c_xff.split(',')[0].trim();
+        }
+    }
+    if (!v_ip && p_req && p_req.socket) {
+        v_ip = p_req.socket.remoteAddress;
+    }
+    if ((typeof v_ip === 'string') && v_ip.toLowerCase().startsWith('::ffff:')) {
+        v_ip = v_ip.slice(7);
+    }
+    return v_ip || null;
+}
+
+
 function _acceptConnection(c_onb, p_ws) {
     const c_status = {};
     c_status.m_TTX = 0;
@@ -44,6 +71,11 @@ function _acceptConnection(c_onb, p_ws) {
     c_andruav_active_senders.addActiveSenderIDList(p_ws.m_loginRequest.m_senderID, p_ws);
     c_ChatAccountRooms.fn_del_member_fromAccountByName(p_ws.m_loginRequest, true);
     c_ChatAccountRooms.fn_add_member_to_AccountGroup(p_ws);
+
+    // A GCS joining a group is allowed on the relay pairs of that group's units.
+    if ((p_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_GCS) && c_udpRelay.fn_isEnabled()) {
+        c_udpRelay.fn_onGcsJoined(p_ws);
+    }
 
     send_ok_message(p_ws);
 
@@ -127,6 +159,8 @@ function fn_onConnect_Handler(p_ws, p_req) {
     const c_WS = p_ws;
     const c_params = getHeaderParams(p_req.url);
     let v_loginTempKey;
+
+    p_ws.m_remoteIp = fn_getClientIp(p_req);
 
     if (global.m_logger) global.m_logger.Info('WS Created from Party', 'fn_onConnect_Handler', null, c_params);
 
@@ -239,6 +273,13 @@ function fn_onConnect_Handler(p_ws, p_req) {
             if (v_unitName != null) {
                 c_udp.closeUDPSocket(v_unitName, function () {},
                     (p_ws.m_loginRequest != null) ? p_ws.m_loginRequest.m_accountID : undefined);
+            }
+
+            // A relay-hosted pair is not closed: the relay is told the unit is
+            // offline and closes the pair after idle_timeout_s without traffic,
+            // so a quick reconnect keeps its ports.
+            if (c_udpRelay.fn_isEnabled()) {
+                c_udpRelay.fn_onUnitDisconnected(p_ws);
             }
 
             // remove from active senderIDs list and notify auth server.
@@ -544,6 +585,7 @@ function fn_startChatServer() {
 
 module.exports = {
     getHeaderParams,
+    fn_getClientIp,
     acceptLocalConnection,
     acceptConnection,
     fn_onConnect_Handler,
