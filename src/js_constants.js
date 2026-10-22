@@ -86,6 +86,7 @@ exports.CONST_TYPE_AndruavSystem_DeleteNews             = 9017; // Client -> Com
 exports.CONST_TYPE_AndruavSystem_NewsPush               = 9018; // StorageServer -> CommServer -> GCS clients: unsolicited news push
 exports.CONST_TYPE_AndruavSystem_AisSub                  = 9019; // GCS -> CommServer: AIS subscribe/unsubscribe (plugin)
 exports.CONST_TYPE_AndruavSystem_AisPush                 = 9020; // CommServer -> GCS: AIS data push (plugin)
+exports.CONST_TYPE_AndruavSystem_UdpProxyPeer            = 9021; // GCS -> CommServer: UDP relay GCS-side pin {tg_unit, act: allow|reset|query}
 
 // News scopes
 exports.CONST_NEWS_SCOPE_GLOBAL  = 'global';
@@ -100,6 +101,9 @@ exports.CONST_STORAGE_STATE_CONNECTING   = 'cg';
 exports.CONST_STORAGE_STATE_CONNECTED    = 'cd';
 exports.CONST_STORAGE_STATE_UNHEALTHY    = 'uh';
 exports.CONST_STORAGE_STATE_ERROR        = 'er';
+
+// Permission bits (same values as de_databus messages.hpp)
+exports.CONST_PERMISSION_ALLOW_GCS_FULL_CONTROL = 0x00000f00;   // de_mavlink requires all of these for its UDP-proxy commands
 
 // Validation
 exports.CONST_ACCESSCODE_MAX_LENGTH = 200;

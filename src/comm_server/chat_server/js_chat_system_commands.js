@@ -88,6 +88,12 @@ function onSystemMessage(v_jmsg, p_ws) {
                 }
                 break;
 
+            case c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxyPeer:
+                c_udpRelay.fn_handleGcsPeerRequest(v_jmsg, p_ws).catch(function (e) {
+                    c_dumpError.fn_dumperror(e);
+                });
+                break;
+
             case c_CONSTANTS.CONST_TYPE_AndruavSystem_Ping:
                 v_jmsg.ms.s = 'OK:pong';
                 // CLOCK.md T2: stamp the server clock so units can sync their

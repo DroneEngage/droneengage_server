@@ -26,6 +26,11 @@
  *     to the unit as an unsolicited 9008 en:true (de_mavlink only re-requests
  *     on reconnect),
  *   - a request made while the relay was down is opened when it comes back.
+ *
+ * GCS-side pinning (relay gcs_peer_policy): `open` carries gcs_ips, the IPs
+ * of the GCS sockets in the unit's account+group; a GCS joining that group
+ * is added with peer_allow; and GCSes manage the pin with 9021
+ * (CONST_TYPE_AndruavSystem_UdpProxyPeer) {tg_unit, act: allow|reset|query}.
  */
 
 const WebSocket = require('ws');
@@ -451,6 +456,36 @@ function fn_pushToUnit(p_account, p_unit, p_ms) {
 }
 
 
+/**
+ * IPs of the GCS sockets in the same account+group as the unit socket.
+ */
+function fn_gcsIpsOfGroup(p_unitWs) {
+    const c_ips = new Set();
+    const c_group = (p_unitWs != null) ? p_unitWs.m__group : null;
+    if (c_group == null || c_group.m_units == null) return [];
+    for (const c_name in c_group.m_units) {
+        const c_ws = c_group.m_units[c_name];
+        if (c_ws && c_ws.m_loginRequest
+            && c_ws.m_loginRequest.m_actorType === c_CONSTANTS.CONST_ACTOR_TYPE_GCS
+            && (typeof c_ws.m_remoteIp === 'string') && c_ws.m_remoteIp.length > 0) {
+            c_ips.add(c_ws.m_remoteIp);
+        }
+    }
+    return Array.from(c_ips);
+}
+
+
+/**
+ * The connected unit socket for an entry, or null (gone, or another account).
+ */
+function fn_unitSocket(p_account, p_unit) {
+    const c_ws = c_activeSenders.getActiveSender(p_unit);
+    if (c_ws == null || c_ws.m_loginRequest == null) return null;
+    if (String(c_ws.m_loginRequest.m_accountID) !== String(p_account)) return null;
+    return c_ws;
+}
+
+
 function fn_openParams(p_entry) {
     const c_ms = {
         account: p_entry.account,
@@ -459,6 +494,8 @@ function fn_openParams(p_entry) {
         req: p_entry.req
     };
     if (p_entry.cap !== undefined) c_ms.cap = p_entry.cap;
+    const c_gcsIps = fn_gcsIpsOfGroup(fn_unitSocket(p_entry.account, p_entry.unit));
+    if (c_gcsIps.length > 0) c_ms.gcs_ips = c_gcsIps;
     return c_ms;
 }
 
@@ -683,6 +720,111 @@ function fn_onRelayPush(p_msg) {
 
 
 // ----------------------------------------------------------------------
+// GCS-side pinning
+// ----------------------------------------------------------------------
+
+/**
+ * A GCS joined a group: allow its IP on the relay pairs of that group's units.
+ */
+function fn_onGcsJoined(p_gcsWs) {
+    if (!fn_isConnected() || p_gcsWs == null || p_gcsWs.m_loginRequest == null) return;
+    const c_ip = p_gcsWs.m_remoteIp;
+    if ((typeof c_ip !== 'string') || c_ip.length === 0) return;
+    const c_login = p_gcsWs.m_loginRequest;
+    m_units.forEach(function (p_entry) {
+        if (p_entry.state !== CONST_UNIT_RELAY) return;
+        if (String(p_entry.account) !== String(c_login.m_accountID) || String(p_entry.group) !== String(c_login.m_groupID)) return;
+        m_relay.fn_request('peer_allow', { account: p_entry.account, unit: p_entry.unit, ips: [c_ip] }).catch(function (ex) {
+            fn_log(`relay peer_allow for '${p_entry.unit}' failed: ${ex.message}`);
+        });
+    });
+}
+
+
+/**
+ * The relay's pinned state of one pair, or null when it has no such pair.
+ */
+async function fn_getRelayPinned(p_account, p_unit) {
+    const c_rep = await m_relay.fn_request('list', { account: p_account });
+    if (c_rep.success !== true || !c_rep.ms || !Array.isArray(c_rep.ms.pairs)) return null;
+    const c_row = c_rep.ms.pairs.find(function (p_row) { return String(p_row.unit) === String(p_unit); });
+    return (c_row === undefined) ? null : (c_row.pinned || null);
+}
+
+
+/**
+ * 9021 UdpProxyPeer from a GCS: ms {tg_unit, act: 'allow'|'reset'|'query'}.
+ * The GCS must be in tg_unit's account+group; allow/reset also need
+ * PERMISSION_ALLOW_GCS_FULL_CONTROL (what de_mavlink requires for its
+ * UDP-proxy commands). allow -> peer_allow with this GCS's IP, reset ->
+ * peer_reset side gcs. Replies {tg_unit, pinned} (plus applied for
+ * allow/reset), or {tg_unit, error}. Without a relay pair (no udp_relay, or
+ * the built-in fallback) the unit is on the built-in proxy: mode 'open'.
+ */
+async function fn_handleGcsPeerRequest(v_jmsg, p_ws) {
+    const c_req = (v_jmsg.ms !== null && typeof v_jmsg.ms === 'object') ? v_jmsg.ms : {};
+    const c_tgUnit = c_req.tg_unit;
+    const c_act = c_req.act;
+    const fn_reply = function (p_ms) {
+        fn_replyToUnit(p_ws, v_jmsg, Object.assign({ tg_unit: c_tgUnit }, p_ms));
+    };
+
+    const c_login = p_ws.m_loginRequest;
+    if (c_login == null || c_login.m_actorType !== c_CONSTANTS.CONST_ACTOR_TYPE_GCS) return;   // GCS only, like 9008 is drone only
+    if ((typeof c_tgUnit !== 'string') || !['allow', 'reset', 'query'].includes(c_act)) {
+        fn_reply({ error: 'bad_request' });
+        return;
+    }
+
+    const c_unitWs = c_activeSenders.getActiveSender(c_tgUnit);
+    if (c_unitWs == null || c_unitWs.m_loginRequest == null
+        || String(c_unitWs.m_loginRequest.m_accountID) !== String(c_login.m_accountID)
+        || String(c_unitWs.m_loginRequest.m_groupID) !== String(c_login.m_groupID)) {
+        fn_reply({ error: 'not_allowed' });
+        return;
+    }
+    const c_full = c_CONSTANTS.CONST_PERMISSION_ALLOW_GCS_FULL_CONTROL;
+    if (c_act !== 'query' && ((Number(c_login.m_prm) & c_full) !== c_full)) {
+        fn_reply({ error: 'permission_denied' });
+        return;
+    }
+
+    const c_account = c_unitWs.m_loginRequest.m_accountID;
+    const c_entry = m_units.get(fn_unitKey(c_account, c_tgUnit));
+    if (!fn_isEnabled() || c_entry === undefined || c_entry.state === CONST_UNIT_BUILTIN) {
+        fn_reply({ pinned: { gcs: { mode: 'open' } } });
+        return;
+    }
+    if (!fn_isConnected()) {
+        fn_reply({ error: 'relay_unavailable' });
+        return;
+    }
+
+    try {
+        let v_applied;
+        if (c_act === 'allow') {
+            if (typeof p_ws.m_remoteIp !== 'string' || p_ws.m_remoteIp.length === 0) {
+                fn_reply({ error: 'no_ip' });
+                return;
+            }
+            const c_rep = await m_relay.fn_request('peer_allow', { account: c_account, unit: c_tgUnit, ips: [p_ws.m_remoteIp] });
+            v_applied = (c_rep.success === true && c_rep.ms && c_rep.ms.applied === true);
+        } else if (c_act === 'reset') {
+            const c_rep = await m_relay.fn_request('peer_reset', { account: c_account, unit: c_tgUnit, side: 'gcs' });
+            v_applied = (c_rep.success === true && c_rep.ms && c_rep.ms.applied === true);
+        }
+        const c_pinned = await fn_getRelayPinned(c_account, c_tgUnit);
+        const c_ms = { pinned: c_pinned };
+        if (v_applied !== undefined) c_ms.applied = v_applied;
+        fn_reply(c_ms);
+    } catch (ex) {
+        fn_log(`9021 ${c_act} for '${c_tgUnit}' failed: ${ex.message}`);
+        fn_reply({ error: 'relay_unavailable' });
+    }
+}
+
+
+// ----------------------------------------------------------------------
 // AUTH dashboard (e / g)
 // ----------------------------------------------------------------------
 
@@ -755,6 +897,8 @@ module.exports = {
     fn_sendStatus,
     fn_handleUnitRequest,
     fn_onUnitDisconnected,
+    fn_onGcsJoined,
+    fn_handleGcsPeerRequest,
     fn_getRelayProxiesList,
     fn_setRelayProxyBlocked
 };
