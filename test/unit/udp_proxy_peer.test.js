@@ -278,3 +278,62 @@ test('9021 without a relay: the built-in proxy is mode open', async function () 
         fn_teardown(c_sockets);
     }
 });
+
+
+// ----------------------------------------------------------------------
+// TASK-59: `pinned` forwarded in the `f` proxies report for the AUTH dashboard
+// ----------------------------------------------------------------------
+
+test('fn_listRelay forwards pinned only when the relay row has it', async function () {
+    fn_setup({});
+    try {
+        const c_fakeRelay = {
+            m_endpoint: { id: 'R_stub' },
+            fn_request: async function (p_cmd) {
+                assert.strictEqual(p_cmd, 'list');
+                return { success: true, ms: { relay_id: 'R_stub', pairs: [
+                    { owner: CONST_SERVER_ID, unit: 'u_pin', account: 'acc1', group: 'g1',
+                      socket1: { address: '1.2.3.4', port: 1 }, socket2: { address: '1.2.3.4', port: 2 },
+                      pinned: { gcs: { mode: 'tofu', ip: '10.0.0.9', port: 14550 }, unit: { mode: 'open' } } },
+                    { owner: CONST_SERVER_ID, unit: 'u_nopin', account: 'acc1', group: 'g1',
+                      socket1: { address: '1.2.3.4', port: 3 }, socket2: { address: '1.2.3.4', port: 4 } },
+                    { owner: 'OTHER_CS', unit: 'u_other', account: 'acc1', group: 'g1',
+                      socket1: { address: '1.2.3.4', port: 5 }, socket2: { address: '1.2.3.4', port: 6 },
+                      pinned: { gcs: { mode: 'tofu' } } }
+                ]}};
+            }
+        };
+
+        const c_rows = await c_relayClient.fn_listRelay(c_fakeRelay);
+        assert.strictEqual(c_rows.length, 2, 'only pairs owned by this comm server');
+        assert.deepStrictEqual(c_rows[0].pinned, { gcs: { mode: 'tofu', ip: '10.0.0.9', port: 14550 }, unit: { mode: 'open' } });
+        assert.ok(!Object.prototype.hasOwnProperty.call(c_rows[1], 'pinned'), 'no pinned field when the relay row lacks it');
+    } finally {
+        fn_teardown([]);
+    }
+});
+
+
+test('f report rows carry the relay pin state', { skip: r.CONST_SKIP_RELAY }, async function () {
+    fn_setup({ trust_proxy_header: false });
+    const c_relay = await fn_startRelayed();
+    const c_sockets = [];
+    try {
+        const c_unit = fn_connect('u5', 'd', { ip: '127.0.0.1' });
+        c_sockets.push(c_unit);
+        fn_9008(c_unit);
+        assert.ok(await r.fn_waitFor(function () { return c_unit.sent.some(function (m) { return m.mt === 9008; }); }));
+        const c_gcs = fn_connect('gcs_r', 'g', { ip: '::ffff:127.0.0.7' });
+        c_sockets.push(c_gcs);
+        await r.fn_sleep(150);
+
+        const c_rows = await c_relayClient.fn_getRelayProxiesList();
+        const c_row = c_rows.find(function (p_row) { return p_row.name === 'u5'; });
+        assert.ok(c_row, 'u5 in the proxies report');
+        assert.ok(!Object.prototype.hasOwnProperty.call(c_row, 'm_relay'), 'internal relay ref stripped');
+        assert.deepStrictEqual(c_row.pinned, (await fn_relayRow(c_relay, 'u5')).pinned);
+    } finally {
+        fn_teardown(c_sockets);
+        await c_relay.stop();
+    }
+});
