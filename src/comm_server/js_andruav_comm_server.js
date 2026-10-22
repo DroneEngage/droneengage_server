@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const c_CONSTANTS = require("../js_constants");
 const c_dbProxyClient = require("./server_to_server/js_db_proxy_client.js");
 const c_udpProxy = require("./js_udp_proxy.js");
+const c_udpRelayClient = require("./server_to_server/js_udp_relay_client.js");
 const c_activeSenders = require("./chat_server/js_andruav_active_senders.js");
 const v_version = require('../../package.json').version;
 
@@ -199,13 +200,17 @@ function fn_AuthServerMessagesHandler(p_msg) {
 
             case c_CONSTANTS.CONST_CS_CMD_QUERY_UDP_PROXIES:
                 {
-                    fn_handleQueryUdpProxies(p_cmd);
+                    fn_handleQueryUdpProxies(p_cmd).catch(function (ex) {
+                        console.log("err: fn_handleQueryUdpProxies: " + ex);
+                    });
                 }
                 break;
 
             case c_CONSTANTS.CONST_CS_CMD_SET_UDP_PROXY_STATE:
                 {
-                    fn_handleSetUdpProxyState(p_cmd);
+                    fn_handleSetUdpProxyState(p_cmd).catch(function (ex) {
+                        console.log("err: fn_handleSetUdpProxyState: " + ex);
+                    });
                 }
                 break;
 
@@ -223,15 +228,25 @@ function fn_AuthServerMessagesHandler(p_msg) {
 
 
 /**
+ * Built-in proxies plus the relay pairs this comm server owns (when
+ * udp_relay is configured), in the REPORT_UDP_PROXIES row shape.
+ */
+async function fn_getAllUdpProxiesList() {
+    const c_rows = c_udpProxy.fn_getActiveProxiesList();
+    if (!c_udpRelayClient.fn_isEnabled()) return c_rows;
+    return c_rows.concat(await c_udpRelayClient.fn_getRelayProxiesList());
+}
+
+/**
  * Replies to an AUTH-server QUERY for this comm server's currently-open UDP
  * proxies, so AUTH can display them on its dashboard.
  * @param {*} p_cmd request from AUTH_SERVER. p_cmd.d{r: requestID GUID} (optional, echoed back)
  */
-function fn_handleQueryUdpProxies(p_cmd) {
+async function fn_handleQueryUdpProxies(p_cmd) {
     const c_reply = {
         'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
         'd': {
-            'proxies': c_udpProxy.fn_getActiveProxiesList()
+            'proxies': await fn_getAllUdpProxiesList()
         }
     };
 
@@ -244,14 +259,23 @@ function fn_handleQueryUdpProxies(p_cmd) {
 
 /**
  * Handles an AUTH-server request to block/resume packet forwarding on a named
- * UDP proxy (p_cmd.d{name: unit/proxy name, blocked: bool}). The block is
- * in-memory only and silently drops packets. Replies with the same
- * CONST_CS_CMD_REPORT_UDP_PROXIES report shape so AUTH can refresh its view.
+ * UDP proxy (p_cmd.d{name: unit/proxy name, blocked: bool, account?}). Pairs
+ * are per account: with `account` only that pair is touched; with only
+ * `name` the single pair of that name, or none (applied:false) when several
+ * accounts have one. With udp_relay configured the relay pairs this comm
+ * server owns for that unit (optionally only in `account`) are blocked too.
+ * The block is in-memory only and silently drops packets. Replies with the
+ * same CONST_CS_CMD_REPORT_UDP_PROXIES report shape so AUTH can refresh its view.
  */
-function fn_handleSetUdpProxyState(p_cmd) {
+async function fn_handleSetUdpProxyState(p_cmd) {
     const c_name = p_cmd.d ? p_cmd.d.name : null;
     const c_blocked = (p_cmd.d && p_cmd.d.blocked === true);
-    const c_applied = (typeof c_name === 'string') && c_udpProxy.fn_setProxyBlocked(c_name, c_blocked);
+    const c_account = p_cmd.d ? p_cmd.d.account : undefined;
+    let c_applied = (typeof c_name === 'string') && c_udpProxy.fn_setProxyBlocked(c_name, c_blocked, c_account);
+    if ((typeof c_name === 'string') && c_udpRelayClient.fn_isEnabled()) {
+        const c_relayApplied = await c_udpRelayClient.fn_setRelayProxyBlocked(c_name, c_blocked, c_account);
+        c_applied = c_applied || c_relayApplied;
+    }
 
     if (!c_applied) {
         console.log(`[WARN] SET_UDP_PROXY_STATE for unknown proxy '${c_name}'`);
@@ -260,12 +284,13 @@ function fn_handleSetUdpProxyState(p_cmd) {
     const c_reply = {
         'c': c_CONSTANTS.CONST_CS_CMD_REPORT_UDP_PROXIES,
         'd': {
-            'proxies': c_udpProxy.fn_getActiveProxiesList(),
+            'proxies': await fn_getAllUdpProxiesList(),
             'name': c_name,
             'blocked': c_blocked,
             'applied': c_applied
         }
     };
+    if (c_account != null) c_reply.d.account = c_account;
 
     if (p_cmd.d && p_cmd.d.hasOwnProperty(c_CONSTANTS.CONST_CS_REQUEST_ID.toString())) {
         c_reply.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()] = p_cmd.d[c_CONSTANTS.CONST_CS_REQUEST_ID.toString()];
@@ -372,6 +397,15 @@ function fn_startServer() {
         });
     }
 
+    // UDP relay (udp_relay configured): broker 9008 to the relay server and
+    // report its link status to AUTH as `j` UDP_RELAY_STATUS.
+    c_udpRelayClient.fn_initialize();
+    if (global.m_serverconfig.m_configuration.ignore_auth_server !== true) {
+        c_udpRelayClient.fn_setSendToAuthCallback((p_message) => {
+            m_commServerManagerClient.fn_sendMessage(p_message);
+        });
+    }
+
     // Fan out unsolicited News changes (from any comm server's WS path, or the
     // storage server admin dashboard) to the GCS clients connected to this comm server.
     c_dbProxyClient.fn_setNewsPushCallback(require("./chat_server/js_chat_news.js").fn_onNewsPush);
@@ -384,6 +418,9 @@ function fn_startServer() {
 
 module.exports = {
     fn_startServer: fn_startServer,
+    fn_AuthServerMessagesHandler: fn_AuthServerMessagesHandler,
+    fn_handleQueryUdpProxies: fn_handleQueryUdpProxies,
+    fn_handleSetUdpProxyState: fn_handleSetUdpProxyState,
     fn_addWaitingAccount: fn_addWaitingAccount,
     fn_generateLoginRequestReply: fn_generateLoginRequestReply,
     fn_cancelLoginRequestBySenderID: fn_cancelLoginRequestBySenderID,

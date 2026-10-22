@@ -1,6 +1,9 @@
 # UDP Relay Server — Design
 
-Status: **design only**, nothing here is implemented.
+Status: **implemented** in `droneengage_udp_relay_server` (TASK-50, 51, 53,
+55 and 56) and in the comm server (TASK-52, 54 and 57). The de_mavlink,
+webclient, authenticator and simulator parts follow in their own tasks. Where
+the implementation differs from this design, a note in that section says so.
 
 Proposal: move the UDP proxy out of `droneengage_server` into its own
 process, the **UDP relay server**, the same way mission and task
@@ -416,6 +419,16 @@ DroneEngage token.
 
 ### 5.3 Client changes this needs
 
+> **Implementation note (TASK-54).** The optional `pin` field on 1071, listed
+> in the webclient row below, was **not** implemented. de_mavlink sends 1071
+> and can't know the relay's pin state. Instead, a GCS uses the comm-server
+> system message **9021 `UdpProxyPeer`** `{tg_unit, act: 'allow'|'reset'|'query'}`.
+> The reply is `{tg_unit, pinned, applied?}` or `{tg_unit, error}`. The GCS
+> must be in the unit's account and group, and `allow`/`reset` also need
+> `PERMISSION_ALLOW_GCS_FULL_CONTROL`. Without a relay pair, 9021 answers
+> `pinned: {gcs: {mode: 'open'}}`. **Activate** maps to `allow` and
+> **Reset peer** to `reset`.
+
 | Component | Change |
 |---|---|
 | de_mavlink | advertise `cap: ["tk"]` in 9008; send the `DEU1` hello at open and every 5 s; keep everything else (it already re-inits on an unsolicited 9008 `en:true`); optional `udp_proxy_require_signing` |
@@ -474,7 +487,8 @@ The relay can't see websockets, so presence comes from the owner:
 - **No `udp_relay` key, no change.** The built-in `js_udp_proxy.js` and
   every wire message stay as they are.
 - Wire formats are only **extended**: 9008 gains optional `cap` (request)
-  and `tk` (reply), and 1071 gains optional `pin`. Old de_mavlink
+  and `tk` (reply), and the new 9021 carries the pin state (in place of
+  the 1071 `pin` field first proposed here, see §5.3). Old de_mavlink
   versions and old webclients ignore unknown fields.
 - `allow_udpproxy_fixed_port` keeps its meaning for the built-in path.
   The relay's `allow_fixed_port` plus the range replaces it there.

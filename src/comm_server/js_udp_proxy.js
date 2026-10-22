@@ -272,9 +272,30 @@ class udp_proxy {
     }
 }
 
+/**
+ * Active pairs keyed by `<accountID>/<unit name>` (fn_proxyKey), so a unit
+ * `drone1` in account A and `drone1` in account B get separate pairs.
+ * Each entry keeps its `name` and `account`.
+ */
 const m_activeUdpProxy = {};
 let m_reaperInterval = null;
 let m_lastReaperTick = 0;
+
+function fn_proxyKey(account, name) {
+    return String(account == null ? '' : account) + '/' + String(name);
+}
+
+/**
+ * The unit's live socket, only if it is this entry's unit (same account):
+ * active senders are keyed by name alone.
+ */
+function fn_entrySocket(entry) {
+    const socket = c_activeSenders.getActiveSender(entry.name);
+    if (socket == null || socket.readyState !== 1) return null;
+    if (socket.m_loginRequest != null && entry.account != null
+        && String(socket.m_loginRequest.m_accountID) !== String(entry.account)) return null;
+    return socket;
+}
 
 function recreateProxy(name, entry, reason, onComplete) {
     if (!entry || !entry.m_udpproxy) {
@@ -323,14 +344,14 @@ function recreateProxy(name, entry, reason, onComplete) {
 }
 
 function recoverAllProxiesAfterResume(gapMs) {
-    const names = Object.keys(m_activeUdpProxy);
-    if (names.length === 0) return;
+    const keys = Object.keys(m_activeUdpProxy);
+    if (keys.length === 0) return;
 
-    console.log(`Reaper: Detected possible system resume (timer gap ${gapMs} ms). Recreating ${names.length} UDP proxy instance(s).`);
+    console.log(`Reaper: Detected possible system resume (timer gap ${gapMs} ms). Recreating ${keys.length} UDP proxy instance(s).`);
 
-    for (const name of names) {
-        const entry = m_activeUdpProxy[name];
-        recreateProxy(name, entry, 'resume recovery');
+    for (const key of keys) {
+        const entry = m_activeUdpProxy[key];
+        recreateProxy(key, entry, 'resume recovery');
     }
 }
 
@@ -340,10 +361,11 @@ function recoverAllProxiesAfterResume(gapMs) {
  * proxy when telemetry is resumed.  If the unit is no longer connected the
  * notification is silently skipped.
  */
-function notifyUnitProxyClosed(name, reason) {
+function notifyUnitProxyClosed(entry, reason) {
+    const name = entry.name;
     try {
-        const socket = c_activeSenders.getActiveSender(name);
-        if (socket == null || socket.readyState !== 1) return;
+        const socket = fn_entrySocket(entry);
+        if (socket == null) return;
 
         const msg = {};
         msg[c_CONSTANTS.CONST_WS_MESSAGE_ID] = c_CONSTANTS.CONST_TYPE_AndruavSystem_UdpProxy;
@@ -378,17 +400,18 @@ function startReaper() {
         }
 
         m_lastReaperTick = now;
-        const names = Object.keys(m_activeUdpProxy);
+        const keys = Object.keys(m_activeUdpProxy);
         
-        for (const name of names) {
-            const entry = m_activeUdpProxy[name];
+        for (const key of keys) {
+            const entry = m_activeUdpProxy[key];
             if (!entry || !entry.m_udpproxy) continue;
+            const name = entry.name;
 
             if (!entry.m_udpproxy.isReady()) {
-                recreateProxy(name, entry, 'health check not ready', (enabled) => {
+                recreateProxy(key, entry, 'health check not ready', (enabled) => {
                     // If recreate also failed, notify the unit so it can re-request.
                     if (!enabled) {
-                        notifyUnitProxyClosed(name, 'health check recreate failed');
+                        notifyUnitProxyClosed(entry, 'health check recreate failed');
                     }
                 });
                 continue;
@@ -404,15 +427,14 @@ function startReaper() {
                 // Skip idle close if the unit is still connected — the proxy
                 // is still needed (telemetry may simply be paused).  Only
                 // reap orphaned proxies for units that have disconnected.
-                const ws = c_activeSenders.getActiveSender(name);
-                if (ws != null && ws.readyState === 1) {
+                if (fn_entrySocket(entry) != null) {
                     continue;
                 }
 
-                console.log(`Reaper: Closing idle UDP proxy '${name}' (idle for ${Math.round((now - lastAccess) / 1000)}s, unit disconnected)`);
+                console.log(`Reaper: Closing idle UDP proxy '${key}' (idle for ${Math.round((now - lastAccess) / 1000)}s, unit disconnected)`);
                 entry.m_udpproxy.close();
-                delete m_activeUdpProxy[name];
-                notifyUnitProxyClosed(name, 'idle timeout (unit disconnected)');
+                delete m_activeUdpProxy[key];
+                notifyUnitProxyClosed(entry, 'idle timeout (unit disconnected)');
             }
         }
         
@@ -438,8 +460,8 @@ function stopReaper() {
  * (e.g. mid-recreate) so the dashboard reflects reality, not just healthy ones.
  */
 function fn_getActiveProxiesList() {
-    return Object.keys(m_activeUdpProxy).map((name) => {
-        const entry = m_activeUdpProxy[name];
+    return Object.keys(m_activeUdpProxy).map((key) => {
+        const entry = m_activeUdpProxy[key];
         const proxy = entry.m_udpproxy;
         const config = proxy ? proxy.getConfig() : {
             socket1: { address: '0.0.0.0', port: 0 },
@@ -452,7 +474,8 @@ function fn_getActiveProxiesList() {
         );
 
         return {
-            name: name,
+            name: entry.name,
+            account: entry.account,
             socket1: config.socket1,
             socket2: config.socket2,
             ready: proxy ? proxy.isReady() : false,
@@ -467,26 +490,43 @@ function fn_getActiveProxiesList() {
  * Blocks or resumes packet forwarding on a named proxy. In-memory only — the
  * flag is lost on restart, and blocking is invisible to clients (packets are
  * silently dropped, indistinguishable from packet loss).
- * @returns {boolean} true if a proxy with this name exists
+ * With `account` only that account's pair is touched; with only `name` the
+ * single pair of that name, and nothing when several accounts have one
+ * (ambiguous).
+ * @returns {boolean} true if exactly one matching proxy was updated
  */
-function fn_setProxyBlocked(name, blocked) {
-    const entry = m_activeUdpProxy[name];
+function fn_setProxyBlocked(name, blocked, account) {
+    let entry = null;
+    if (account != null) {
+        entry = m_activeUdpProxy[fn_proxyKey(account, name)] || null;
+    } else {
+        const matches = Object.values(m_activeUdpProxy).filter((e) => e.name === name);
+        if (matches.length > 1) {
+            console.log(`UDP proxy '${name}' exists in ${matches.length} accounts; block needs an account.`);
+            return false;
+        }
+        entry = matches[0] || null;
+    }
     if (!entry) return false;
 
     entry.blocked = (blocked === true);
     if (entry.m_udpproxy) {
         entry.m_udpproxy.setBlocked(entry.blocked);
     }
-    console.log(`UDP proxy '${name}' ${entry.blocked ? 'BLOCKED (packets dropped)' : 'unblocked (forwarding resumed)'} by admin.`);
+    console.log(`UDP proxy '${fn_proxyKey(entry.account, entry.name)}' ${entry.blocked ? 'BLOCKED (packets dropped)' : 'unblocked (forwarding resumed)'} by admin.`);
     return true;
 }
 
-function closeUDPSocket(name, callback) {
+/**
+ * Closes the pair of unit `name` in `account`.
+ */
+function closeUDPSocket(name, callback, account) {
+    const key = fn_proxyKey(account, name);
     let ms = {};
-    if (m_activeUdpProxy.hasOwnProperty(name)) {
-        ms = m_activeUdpProxy[name].m_udpproxy.getConfig();
-        m_activeUdpProxy[name].m_udpproxy.close();
-        delete m_activeUdpProxy[name];
+    if (m_activeUdpProxy.hasOwnProperty(key)) {
+        ms = m_activeUdpProxy[key].m_udpproxy.getConfig();
+        m_activeUdpProxy[key].m_udpproxy.close();
+        delete m_activeUdpProxy[key];
     } else {
         ms = {
             socket1: { address: '0.0.0.0', port: 0 },
@@ -498,36 +538,42 @@ function closeUDPSocket(name, callback) {
     callback(ms);
 }
 
-function getUDPSocket(name, socket1, socket2, callback) {
-    console.log(`getUDPSocket('${name}', socket1.port=${socket1.port}, socket2.port=${socket2.port}) existing=${m_activeUdpProxy.hasOwnProperty(name)}`);
+/**
+ * Opens (or reuses) the pair of unit `name` in `account`.
+ */
+function getUDPSocket(name, socket1, socket2, callback, account) {
+    const key = fn_proxyKey(account, name);
+    console.log(`getUDPSocket('${key}', socket1.port=${socket1.port}, socket2.port=${socket2.port}) existing=${m_activeUdpProxy.hasOwnProperty(key)}`);
 
-    if (!m_activeUdpProxy.hasOwnProperty(name) || m_activeUdpProxy[name] == null) {
+    if (!m_activeUdpProxy.hasOwnProperty(key) || m_activeUdpProxy[key] == null) {
         // New socket
         const obj = {
+            name: name,
+            account: account,
             created: Date.now(),
             last_access: Date.now(),
             socket1_port: socket1.port || 0,
             socket2_port: socket2.port || 0
         };
-        m_activeUdpProxy[name] = obj;
+        m_activeUdpProxy[key] = obj;
 
         obj.m_udpproxy = new udp_proxy("0.0.0.0", socket1.port, "0.0.0.0", socket2.port, (enabled) => {
             const ms = obj.m_udpproxy.getConfig();
             obj.socket1_port = ms.socket1.port;
             obj.socket2_port = ms.socket2.port;
             ms.en = enabled;
-            console.log(`getUDPSocket('${name}') proxy ready=${enabled} socket1=${JSON.stringify(ms.socket1)} socket2=${JSON.stringify(ms.socket2)}`);
+            console.log(`getUDPSocket('${key}') proxy ready=${enabled} socket1=${JSON.stringify(ms.socket1)} socket2=${JSON.stringify(ms.socket2)}`);
             startReaper();
             callback(ms);
         });
     } else {
         // This unit has already a socket
-        const entry = m_activeUdpProxy[name];
+        const entry = m_activeUdpProxy[key];
         const ms = entry.m_udpproxy.getConfig();
 
         if ((socket1.port === 0 || ms.socket1.port === socket1.port) && (socket2.port === 0 || ms.socket2.port === socket2.port)) {
             if (!entry.m_udpproxy.isReady()) {
-                recreateProxy(name, entry, 'getUDPSocket refresh', (enabled) => {
+                recreateProxy(key, entry, 'getUDPSocket refresh', (enabled) => {
                     const refreshed = entry.m_udpproxy.getConfig();
                     refreshed.en = enabled;
                     callback(refreshed);
@@ -541,8 +587,8 @@ function getUDPSocket(name, socket1, socket2, callback) {
         } else {
             // Close unit old socket
             closeUDPSocket(name, () => {
-                getUDPSocket(name, socket1, socket2, callback); // Recursive to create a new one after deleting the current.
-            });
+                getUDPSocket(name, socket1, socket2, callback, account); // Recursive to create a new one after deleting the current.
+            }, account);
         }
     }
 }

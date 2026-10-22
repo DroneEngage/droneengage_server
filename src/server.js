@@ -181,7 +181,14 @@ function fn_startServer ()
     fn_displayInfo();
     m_andruav_comm_server.fn_startServer();
 
-    m_udp_proxy.checkAndFixKernelBuffers();
+    // The kernel UDP buffer limits only matter while this process hosts the
+    // built-in proxy: always without udp_relay, or as udp_relay_fallback builtin.
+    const c_udpRelay = global.m_serverconfig.m_configuration.udp_relay;
+    const c_relayOnly = Array.isArray(c_udpRelay) && (c_udpRelay.length > 0)
+        && (global.m_serverconfig.m_configuration.udp_relay_fallback !== 'builtin');
+    if (!c_relayOnly) {
+        m_udp_proxy.checkAndFixKernelBuffers();
+    }
 
     if (global.m_serverconfig.m_configuration.enable_super_server === true)
     {
