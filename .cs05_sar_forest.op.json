@@ -1,0 +1,415 @@
+{
+  "fileType": "de_operation",
+  "schema": "de.operation/2",
+  "op": "sar_forest",
+  "comment": "TASK-P4B-10 reference SAR operation (forest, Scenario A): wide search (camera survey + flying SDR corner loiter) -> phone signal -> 3-way partitioned sector scan -> person confirmed -> ambulance deliver with operator approvals -> payload.dropped -> OP_END. phone confirm k=1 by design: exactly one SDR source exists in this scenario, so a single sdr.signal confirms the phone candidate.",
+  "area": [
+    [
+      -35.357872,
+      149.15973
+    ],
+    [
+      -35.357872,
+      149.170744
+    ],
+    [
+      -35.368652,
+      149.170744
+    ],
+    [
+      -35.368652,
+      149.15973
+    ]
+  ],
+  "alt_layers": {
+    "base": 40,
+    "step": 6,
+    "count": 8
+  },
+  "roles": {
+    "cam_scout": {
+      "count": 1,
+      "vehicle": "copter",
+      "requires": [
+        "camera",
+        "visual_tracker"
+      ],
+      "layer": 7
+    },
+    "sdr_scout": {
+      "count": 1,
+      "vehicle": "copter",
+      "requires": [
+        "sdr"
+      ],
+      "layer": 6
+    },
+    "searcher": {
+      "count": 3,
+      "vehicle": "copter",
+      "requires": [
+        "camera"
+      ],
+      "layer": 1
+    },
+    "ambulance": {
+      "count": 1,
+      "vehicle": "copter",
+      "requires": [
+        "payload"
+      ],
+      "start": "ground",
+      "auto_launch": true,
+      "layer": 0
+    }
+  },
+  "events": {
+    "detect.detected": {
+      "target": "person",
+      "payload": {
+        "tid": "string",
+        "pos": "geo",
+        "unc_m": "number",
+        "conf": "number"
+      }
+    },
+    "sdr.signal": {
+      "target": "phone",
+      "payload": {
+        "pos": "geo",
+        "unc_m": "number",
+        "conf": "number"
+      }
+    },
+    "payload.released": {},
+    "payload.dropped": {
+      "serves": "person",
+      "payload": {
+        "tid": "string"
+      }
+    }
+  },
+  "confirm": {
+    "phone": {
+      "policy": "k_sources_within",
+      "k": 1,
+      "d_m": 50
+    },
+    "person": {
+      "policy": "operator_confirm"
+    }
+  },
+  "missions": {
+    "cam_scout": {
+      "wide_search": {
+        "trigger": "op.start",
+        "steps": [
+          {
+            "id": "takeoff",
+            "nav": "takeoff",
+            "alt": 82
+          },
+          {
+            "id": "survey",
+            "pattern": "survey",
+            "area": [
+              [
+                -35.357872,
+                149.15973
+              ],
+              [
+                -35.357872,
+                149.170744
+              ],
+              [
+                -35.368652,
+                149.170744
+              ],
+              [
+                -35.368652,
+                149.15973
+              ]
+            ],
+            "alt": 82,
+            "spacing": 40
+          }
+        ],
+        "end": "hold",
+        "end_backstop": {
+          "timeout": 300,
+          "then": "rtl"
+        }
+      },
+      "orbit_track": {
+        "trigger": {
+          "event": "sys.target_new",
+          "when": "${target.cls == 'person'}",
+          "once_per": "target"
+        },
+        "priority": 20,
+        "precheck": [
+          "${self.bat >= 35}"
+        ],
+        "gen": {
+          "type": "orbit",
+          "params": {
+            "center": "${target.pos}",
+            "r": 150,
+            "turns": 8,
+            "alt": "${op.params.inspect_alt}"
+          }
+        },
+        "end": "hold",
+        "end_backstop": {
+          "timeout": 90,
+          "then": "rtl"
+        }
+      }
+    },
+    "sdr_scout": {
+      "wide_search_rf": {
+        "trigger": "op.start",
+        "priority": 10,
+        "steps": [
+          {
+            "id": "takeoff",
+            "nav": "takeoff",
+            "alt": 76
+          },
+          {
+            "id": "corner",
+            "nav": "wp",
+            "pos": [
+              -35.358411,
+              149.160391,
+              76
+            ]
+          },
+          {
+            "id": "listen",
+            "nav": "loiter",
+            "pos": [
+              -35.358411,
+              149.160391,
+              76
+            ],
+            "unlim": true,
+            "radius": 40
+          }
+        ],
+        "end": "hold",
+        "end_backstop": {
+          "timeout": 120,
+          "then": "rtl"
+        }
+      },
+      "rf_watch": {
+        "trigger": {
+          "event": "sys.phase_entered"
+        },
+        "steps": [
+          {
+            "id": "reset",
+            "do": "sdr.stop"
+          },
+          {
+            "id": "scan",
+            "do": "sdr.scan",
+            "with": {
+              "f_start": 800000000,
+              "f_end": 900000000
+            },
+            "on_error": "end"
+          },
+          {
+            "id": "hear",
+            "gate": {
+              "event": "sdr.signal"
+            },
+            "timeout": 600,
+            "on_timeout": "end"
+          }
+        ],
+        "on_exit": [
+          {
+            "do": "sdr.stop"
+          }
+        ],
+        "end": "repeat",
+        "repeat_min_s": 30
+      }
+    },
+    "searcher": {
+      "hold_home": {
+        "trigger": "op.start",
+        "steps": [
+          {
+            "id": "takeoff",
+            "nav": "takeoff",
+            "alt": 46
+          }
+        ],
+        "end": "hold",
+        "end_backstop": {
+          "timeout": 7200,
+          "then": "rtl"
+        }
+      },
+      "sector_scan": {
+        "trigger": {
+          "event": "sys.target_new",
+          "when": "${target.cls == 'phone'}",
+          "once_per": "target"
+        },
+        "priority": 30,
+        "precheck": [
+          "${self.bat >= 40}"
+        ],
+        "allocate": {
+          "policy": "partition",
+          "split": "strips",
+          "region": "${square_around(target.pos, max(300, 3 * target.unc_m))}",
+          "clip": "op.area",
+          "max_n": 3,
+          "bid_window_s": 5
+        },
+        "gen": {
+          "type": "lawnmower",
+          "params": {
+            "area": "${alloc.sector}",
+            "spacing": "${footprint_spacing(alloc.layer_alt, 62.2, 0.3)}",
+            "alt": "${alloc.layer_alt}"
+          }
+        },
+        "each_point": {
+          "actions": [
+            {
+              "on": "reached",
+              "do": "camera.capture"
+            }
+          ]
+        },
+        "approval": "auto",
+        "end": "hold",
+        "end_backstop": {
+          "timeout": 120,
+          "then": "rtl"
+        }
+      }
+    },
+    "ambulance": {
+      "deliver": {
+        "trigger": {
+          "event": "sys.target_state",
+          "when": "${target.st == 'confirmed' && target.cls == 'person'}",
+          "once_per": "target"
+        },
+        "priority": 10,
+        "precheck": [
+          "${self.bat >= op.params.launch_min_bat}"
+        ],
+        "gen": {
+          "type": "deliver",
+          "params": {
+            "to": "${target.pos}",
+            "transit_alt": 40,
+            "drop_alt": 15,
+            "hover_s": 150
+          }
+        },
+        "each_point": {
+          "actions": [
+            {
+              "on": "start",
+              "do": "payload.release",
+              "approval": "operator"
+            }
+          ]
+        },
+        "approval": "operator",
+        "end": "rtl",
+        "end_backstop": {
+          "timeout": 60,
+          "then": "rtl"
+        }
+      },
+      "report_drop": {
+        "trigger": {
+          "event": "sys.target_state",
+          "when": "${target.st == 'confirmed' && target.cls == 'person'}",
+          "once_per": "target"
+        },
+        "steps": [
+          {
+            "id": "wait_release",
+            "gate": {
+              "event": "payload.released"
+            },
+            "timeout": 600,
+            "on_timeout": "end"
+          },
+          {
+            "id": "report",
+            "emit": "payload.dropped",
+            "payload_from": "trigger"
+          }
+        ],
+        "end": "hold"
+      }
+    }
+  },
+  "phases": [
+    {
+      "id": "search",
+      "missions": [
+        "wide_search",
+        "wide_search_rf",
+        "rf_watch",
+        "hold_home"
+      ]
+    },
+    {
+      "id": "localize",
+      "missions": [
+        "sector_scan",
+        "orbit_track"
+      ],
+      "enter_on": "sys.target_new"
+    },
+    {
+      "id": "deliver",
+      "missions": [
+        "deliver",
+        "report_drop"
+      ],
+      "enter_on": "sys.target_state"
+    },
+    {
+      "id": "recover",
+      "missions": [],
+      "enter_on": "payload.dropped"
+    }
+  ],
+  "end": {
+    "on": "payload.dropped",
+    "then": {
+      "ambulance": "rtl",
+      "searcher": "rtl",
+      "sdr_scout": "rtl",
+      "cam_scout": "hold"
+    }
+  },
+  "handlers": {
+    "comm_lost": "continue",
+    "battery_low": "rtl",
+    "peer_lost": "continue"
+  },
+  "params": {
+    "min_hsep_m": 25,
+    "min_vsep_m": 6,
+    "sep_policy": "block_new",
+    "approval_timeout_s": 90,
+    "launch_min_bat": 70,
+    "inspect_alt": 82
+  }
+}
