@@ -270,18 +270,20 @@ dependencies = [
 [[package]]
 name = "droneengage_server_common"
 version = "2.0.0"
-source = "git+https://github.com/HefnySco/prv_droneengage_server_common?branch=pr_rust#7a11d352311c6b26e655e25600c4f8bf7cff9abe"
+source = "git+https://github.com/HefnySco/prv_droneengage_server_common?branch=pr_rust#2497764a30ecd6fb803147d2b98f92525cb5d260"
 dependencies = [
  "base64",
  "bcrypt",
  "ed25519-dalek",
  "futures-util",
  "hmac",
+ "minijinja",
  "rand 0.8.8",
  "regex",
  "rustls",
  "rustls-pki-types",
  "serde_json",
+ "sha1 0.10.7",
  "sha2",
  "subtle",
  "tokio",
@@ -540,6 +542,22 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "memo-map"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5449c8c750f1a07ea702bbd212bd999fceece9b3d1508b17023b3e174583124b"
+
+[[package]]
+name = "minijinja"
+version = "2.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86886cf6dbf4e614b19c9a1eec9775f021869d7eadde0fc73921a81b90c9b4c9"
+dependencies = [
+ "memo-map",
+ "serde",
+]
 
 [[package]]
 name = "mio"
@@ -865,6 +883,17 @@ dependencies = [
 
 [[package]]
 name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest 0.10.7",
+]
+
+[[package]]
+name = "sha1"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
@@ -1065,7 +1094,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.10.3",
- "sha1",
+ "sha1 0.11.0",
  "thiserror",
 ]
 
