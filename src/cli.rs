@@ -22,15 +22,6 @@ fn display_help() {
     println!("==================================");
 }
 
-/// `new Date()` as console.log("%s") prints it (UTC).
-fn date_string(p_ms: i64) -> String {
-    let (y, mo, d, h, mi, s, _) = crate::util::civil(p_ms);
-    let v_days = p_ms.div_euclid(86_400_000);
-    let v_wd = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"][v_days.rem_euclid(7) as usize];
-    let v_mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(mo - 1) as usize];
-    format!("{} {} {:02} {:04} {:02}:{:02}:{:02} GMT+0000 (Coordinated Universal Time)", v_wd, v_mon, d, y, h, mi, s)
-}
-
 fn display_info(p_cfg: &Config, p_env: &Env) -> Option<FileLogger> {
     let v_port = match &p_env.comm_server_port {
         Some(p) if !p.is_empty() => p.clone(),
@@ -74,7 +65,8 @@ fn display_info(p_cfg: &Config, p_env: &Env) -> Option<FileLogger> {
         v_logger.info("System Started.", None, None);
         Some(v_logger)
     };
-    println!("Datetime: {}", date_string(now_ms()));
+    // console.log("%s", new Date()) prints the ISO form
+    println!("Datetime: {}", crate::util::iso_time(now_ms()));
     println!("=====================================================================");
     v_logger
 }
@@ -119,7 +111,7 @@ pub async fn run(p_register: impl FnOnce(&crate::chat::plugins::PluginManager)) 
 
     let v_root: PathBuf = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let v_env = Env::from_process();
-    let v_cfg = match Config::load(&v_root, &v_file, &|k| std::env::var(k).ok(), &|l| println!("{}", l)) {
+    let v_cfg = match crate::config::load(&v_root, &v_file, &|k| std::env::var(k).ok(), &|l| println!("{}", l)) {
         Ok(cfg) => cfg,
         Err(e) => {
             eprintln!("{}", e);

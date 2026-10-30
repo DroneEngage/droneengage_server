@@ -8,18 +8,21 @@
 
 pub mod chat;
 pub mod cli;
-pub mod colors;
 pub mod comm_server;
 pub mod config;
 pub mod constants;
 pub mod hub;
-pub mod logger;
-pub mod net;
 pub mod s2s;
 pub mod server;
 pub mod udp_proxy;
-pub mod util;
-pub mod validation;
+
+// shared with the other DroneEngage servers
+pub use droneengage_server_common::{colors, logger, net, util};
+
+/// Validation helpers (hlp_validation.js).
+pub mod validation {
+    pub use droneengage_server_common::validation::is_alphanumeric_str as is_alphanumeric;
+}
 
 use std::sync::Arc;
 

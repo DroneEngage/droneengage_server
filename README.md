@@ -304,6 +304,13 @@ selects `command_processing`. This repository builds the server without
 plugins. [droneengage_server_plugins](https://github.com/DroneEngage/droneengage_server_plugins)
 (branch `pr_rust`) builds the same server with its plugins registered.
 
+## Shared code
+
+Configuration loading, JavaScript-compatible JSON handling, the file
+logger, TLS/WebSocket plumbing and S2S authentication come from
+[droneengage_server_common](https://github.com/HefnySco/prv_droneengage_server_common)
+(branch `pr_rust`), shared with the storage server and the authenticator.
+
 ## Differences from the Node.js server
 
 The Rust server replaces the Node.js one in place: same configuration files,
