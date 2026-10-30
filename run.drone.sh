@@ -4,4 +4,4 @@
 ROOTDIR=$PWD
 
 
-node src/server.js  --config=server.s2s.drone.config
+"${ANDRUAV_SERVER_BIN:-./target/release/andruavmainserver}" --config=server.s2s.drone.config

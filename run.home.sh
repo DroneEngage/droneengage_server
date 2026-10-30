@@ -4,6 +4,6 @@
 ROOTDIR=$PWD
 
 
-node src/server.js  --config=server.home.config
+"${ANDRUAV_SERVER_BIN:-./target/release/andruavmainserver}" --config=server.home.config
 
 

@@ -4,6 +4,17 @@ Major changes to the DroneEngage main signaling (communication) server, newest f
 
 ## [Unreleased]
 
+- **Rust port.** The server is rewritten in Rust (`cargo build --release`,
+  binary `andruavmainserver`) and replaces the Node.js code in place. The
+  configuration files, command line, wire protocol and console output are
+  the same. Behaviour was checked against the Node server with differential
+  tests, including mixed Node/Rust parent-child meshes and the UDP relay.
+  - Plugins are compiled in: droneengage_server_plugins builds the binary
+    with its plugins, and `command_plugin` entries select them by name.
+  - No permessage-deflate (`ws_compression` logs a warning). The unused MySQL
+    task store is removed. `log_timeZone` supports UTC only.
+  - The run scripts start `target/release/andruavmainserver`, or the binary
+    in `ANDRUAV_SERVER_BIN`.
 - **UDP relay server support.** With `udp_relay` configured, 9008 requests
   are brokered to one or more standalone relay servers over an
   S2S-authenticated wss link, instead of the built-in UDP proxy:

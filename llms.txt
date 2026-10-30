@@ -4,13 +4,11 @@
 DroneEngage Communication Server is the real-time messaging backbone for the DroneEngage/Andruav drone management ecosystem. It handles WebSocket-based communication between drone units and Ground Control Stations (GCS), implements server-to-server mesh relay for scalable message propagation, and supports message routing with group and individual targeting using Ed25519 cryptographic authentication.
 
 ## Tech Stack
-- **Runtime**: Node.js >= 18
-- **Web Framework**: Express.js
-- **Database**: MySQL2
-- **Real-time**: WebSocket (ws library)
-- **Authentication**: Ed25519 S2S authentication
-- **UDP**: udp-packet for UDP proxy functionality
-- **Utilities**: lodash, moment, uuid, randomstring, jspack
+- **Language**: Rust (stable), async on tokio
+- **Real-time**: WebSocket (tokio-tungstenite) over TLS (rustls)
+- **Authentication**: Ed25519 (ed25519-dalek) and HMAC-SHA256 S2S authentication
+- **Storage**: tasks and news go through the storage server (S2S link)
+- **Plugins**: Rust crates compiled in (droneengage_server_plugins builds the binary with them)
 
 ## Architecture
 Three operational modes:
@@ -25,26 +23,25 @@ Core components:
 - **Chat System**: Message routing and room management
 
 ## Key Files
-- `src/server.js` - Main entry point, initializes all servers
-- `server.config` - JSON configuration (supports --config override)
-- `package.json` - Dependencies and scripts
-- `src/comm_server/js_andruav_comm_server.js` - Main WebSocket server
-- `src/comm_server/chat_server/js_andruav_chat_server.js` - Chat system singleton
-- `src/comm_server/chat_server/js_chat_routing.js` - Message routing logic
-- `src/comm_server/chat_server/js_chat_connection.js` - Connection management
-- `src/comm_server/chat_server/js_chat_relay.js` - S2S message relay
-- `src/comm_server/server_to_server/js_parent_comm_server.js` - Parent server S2S
-- `src/comm_server/server_to_server/js_child_comm_server.js` - Child server S2S
-- `src/comm_server/js_s2s_auth.js` - Ed25519 S2S authentication
-- `src/comm_server/js_udp_proxy.js` - UDP packet proxy
-- `src/comm_server/js_andruavTasks_v2.js` - Task management
-- `src/js_constants.js` - Message types, routing constants
-- `src/helpers/` - Utility functions (args, strings, validation, colors)
+- `src/main.rs`, `src/cli.rs` - Entry point and command line; `src/lib.rs` - startup sequence
+- `server.config` - JSON configuration (supports --config override, `.local` overlay)
+- `Cargo.toml` - Dependencies
+- `src/chat/connection.rs` - WebSocket server, HTTP upgrade, login and auth frames
+- `src/chat/routing.rs` - Message routing logic
+- `src/chat/rooms.rs`, `src/hub.rs` - Accounts, groups and connections
+- `src/chat/relay.rs` - S2S message relay
+- `src/s2s/parent.rs`, `src/s2s/child.rs` - Parent and child server S2S
+- `src/s2s/s2s_auth.rs` - Ed25519/HMAC S2S authentication
+- `src/s2s/auth_client.rs`, `src/s2s/db_proxy_client.rs`, `src/s2s/udp_relay_client.rs` - AUTH, storage and UDP relay links
+- `src/udp_proxy.rs` - Built-in UDP proxy
+- `src/chat/tasks.rs`, `src/chat/news.rs` - Tasks and news
+- `src/constants.rs` - Message types, routing constants
+- `src/util.rs` - JavaScript-compatible JSON and value helpers
 
 ## Configuration
 Configuration is centralized in `server.config` (JSON format). Key sections:
 - Server identity (server_id, server_ip, server_port, public_host)
-- Database connection (MySQL credentials)
+- Storage server connection (`enable_storage_server`)
 - S2S authentication (Ed25519 private key, trusted public keys for parent mode)
 - SSL/TLS certificates
 - Server roles (enable_super_server, enable_persistant_relay)
@@ -77,27 +74,24 @@ Messages routed based on `ty` (type) and `tg` (target) fields:
 - **Note:** Comm servers always attempt authentication when challenged. The accepting server (Auth Server or parent server) controls whether authentication is required via its configuration.
 
 ## Database
-MySQL database for persistent storage:
-- User accounts
-- Communication server registration
-- Message history (if configured)
-- Task persistence
+The comm server has no database of its own. Tasks (missions) and news are
+loaded and saved through the storage server (`enable_storage_server`, S2S
+link in `src/s2s/db_proxy_client.rs`).
 
 ## Development
 ```bash
-npm install
+cargo build --release
 cp server.config server.config.local
 # Edit server.config.local
 mkdir -p ssl_local/ssl_airgap
 openssl req -x509 -newkey rsa:4096 -keyout ssl_local/ssl_airgap/domain.key -out ssl_local/ssl_airgap/domain.crt -days 365 -nodes
-npm start
+./target/release/andruavmainserver --config=server.config
 ```
 
 ## Testing
 ```bash
-npm test
-npm run test:watch
-node --test test/unit/relay.test.js
+cargo test
+cargo test --test relay
 ```
 
 ## Deployment

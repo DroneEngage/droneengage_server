@@ -26,8 +26,7 @@ The server can operate in different modes:
 
 ### Prerequisites
 
-- Node.js >= 18
-- MySQL (for database-backed storage)
+- Rust (stable, via [rustup](https://rustup.rs))
 - OpenSSL (for SSL certificates)
 
 ### Setup
@@ -37,8 +36,8 @@ The server can operate in different modes:
 git clone https://github.com/HefnySco/andruav_server.git
 cd andruav_server
 
-# Install dependencies
-npm install
+# Build
+cargo build --release
 
 # Copy configuration
 cp server.config server.config.local
@@ -178,7 +177,7 @@ SSL is independent of S2S certificate authentication - similar to the AUTH <--> 
 
 ### UDP Relay Server
 
-By default, the comm server hosts the UDP proxy itself (`js_udp_proxy.js`).
+By default, the comm server hosts the UDP proxy itself (`src/udp_proxy.rs`).
 This is the 9008 port pair that relays MAVLink between a drone's de_mavlink
 and a third-party GCS such as QGroundControl or Mission Planner.
 
@@ -231,8 +230,12 @@ built-in proxy: with no `udp_relay`, or with `udp_relay_fallback: builtin`.
 ### Development
 
 ```bash
-npm start
+cargo run -- --config=server.config
 ```
+
+Paths in the configuration (SSL files, keys, plugins) resolve from the
+working directory, so run the server from the repository root. The binary
+also takes `--help` and `--version`.
 
 ### Production
 
@@ -242,7 +245,7 @@ npm start
 ./deployment/run_slave.sh     # For child server
 
 # Or directly
-NODE_ENV=production npm start
+./target/release/andruavmainserver --config=server.config
 ```
 
 ## Message Propagation
@@ -279,17 +282,40 @@ Messages are routed based on the `ty` (type) and `tg` (target) fields:
 ## Testing
 
 ```bash
-# Run all unit tests
-npm test
+# Run all tests
+cargo test
 
-# Run tests in watch mode
-npm run test:watch
-
-# Run specific test file
-node --test test/unit/relay.test.js
+# Run one test file
+cargo test --test relay
 ```
 
-Test files are located in `test/unit/` and use Node's built-in test runner.
+Tests are in `tests/`. CI also runs `cargo fmt --check` and
+`cargo clippy --all-targets -- -D warnings`. `tests/udp_relay.rs` runs
+against a real relay binary when `DE_UDP_RELAY_BIN` points to one (or a
+sibling `prv_droneengage_udp_proxy` checkout has been built) and is skipped
+otherwise.
+
+## Plugins
+
+Command plugins are Rust crates compiled into the binary, not files loaded at
+run time. `command_plugin` entries select registered plugins by a component
+of their path, so `"./plugins/command_processing/js_andruav_command_processing"`
+selects `command_processing`. This repository builds the server without
+plugins. [droneengage_server_plugins](https://github.com/DroneEngage/droneengage_server_plugins)
+(branch `pr_rust`) builds the same server with its plugins registered.
+
+## Differences from the Node.js server
+
+The Rust server replaces the Node.js one in place: same configuration files,
+command line, wire protocol and console output. Known differences:
+
+- No permessage-deflate. With `ws_compression` set, a warning is logged and
+  connections are uncompressed.
+- The unused MySQL task store is gone. Tasks go through the storage server.
+- `log_timeZone` supports UTC only.
+- An invalid `command_plugin` value logs an error instead of stopping the
+  server.
+- `NODE_EXTRA_CA_CERTS` is still honoured for the AUTH server link.
 
 ## S2S Key Generation
 
@@ -326,7 +352,7 @@ Example configuration files are provided in the `deployment/` directory:
 ## Troubleshooting
 
 ### WebSocket Connection Fails
-- Check server is running: `npm start`
+- Check server is running: `./target/release/andruavmainserver`
 - Verify port is not in use
 - Check SSL certificate validity
 - Verify firewall allows WebSocket connections
@@ -352,23 +378,22 @@ Example configuration files are provided in the `deployment/` directory:
 
 ```
 droneengage_server/
+├── Cargo.toml
 ├── src/
-│   ├── server.js              # Main entry point
-│   ├── js_constants.js        # Message types, routing constants
-│   ├── js_serverConfig.js     # Config loader
-│   ├── dumperror.js           # Error dump utility
-│   ├── helpers/               # Utility functions (args, strings, validation, colors)
-│   ├── plugins/               # Command plugins
-│   └── comm_server/
-│       ├── chat_server/       # Message routing logic
-│       │   └── js_chat_tasks.js  # Task handlers with DBProxyClient integration
-│       └── server_to_server/  # S2S communication
-│           └── js_db_proxy_client.js  # Storage server client
+│   ├── main.rs                # Binary entry point
+│   ├── cli.rs                 # Command line, banner, memory watchdog
+│   ├── lib.rs                 # Startup sequence
+│   ├── config.rs              # server.config (+ .local) loader
+│   ├── constants.rs           # Message types, routing constants
+│   ├── server.rs              # Shared server state
+│   ├── hub.rs                 # Connections, accounts, groups
+│   ├── comm_server.rs         # AUTH-driven commands (logins, blocking)
+│   ├── udp_proxy.rs           # Built-in UDP proxy
+│   ├── chat/                  # WebSocket server, routing, tasks, news, plugins
+│   └── s2s/                   # AUTH, storage, relay and parent/child links
+├── tests/                     # Integration tests
 ├── ssl_local/                 # SSL certificates and S2S keys
 ├── deployment/                # Deployment configurations
-├── test/
-│   ├── unit/                  # Unit tests
-│   └── helpers/               # Test utilities
 ├── wiki/                      # Documentation
 ```
 
