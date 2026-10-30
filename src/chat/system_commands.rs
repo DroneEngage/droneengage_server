@@ -1,0 +1,142 @@
+//! System commands (js_chat_system_commands.js): messages routed 's' — UDP
+//! proxy (9008) and its GCS-side pin (9021), ping, logout, and the task /
+//! mission / query / news commands.
+
+use serde_json::{json, Map, Value};
+use std::sync::Arc;
+
+use crate::chat::{dump_error, news, query_server, tasks, Ctx};
+use crate::constants::*;
+use crate::server::Server;
+use crate::util::{field, is_true, js_interp, js_truthy, now_ms, set_field};
+
+/// Today's built-in UDP proxy handling of a 9008 request (js_udp_proxy.js),
+/// used without udp_relay and as the relay's `udp_relay_fallback: builtin`.
+pub async fn handle_builtin_udp_proxy(p_server: &Arc<Server>, p_ctx: &Ctx, mut p_jmsg: Value) {
+    let Some(v_ms) = p_jmsg.get("ms").filter(|m| !m.is_null()).cloned() else {
+        dump_error("TypeError: Cannot read properties of undefined (reading 'en')");
+        return;
+    };
+    let v_account = p_ctx.account_id();
+    let v_name = p_ctx.name_now(p_server);
+    let fn_reply = |p_jmsg: &mut Value, p_ms: Map<String, Value>| {
+        set_field(p_jmsg, "ms", Value::Object(p_ms));
+        set_field(p_jmsg, "ty", json!(CONST_WS_MSG_ROUTING_INDIVIDUAL));
+        crate::util::set_field_opt(p_jmsg, "tg", v_name.clone());
+        set_field(p_jmsg, "sd", json!(CONST_WS_SENDER_COMM_SERVER));
+        p_ctx.handle.send_json(p_jmsg);
+    };
+    if is_true(field(&v_ms, "en")) {
+        let (Some(v_s1), Some(v_s2)) =
+            (field(&v_ms, "socket1").filter(|s| !s.is_null()), field(&v_ms, "socket2").filter(|s| !s.is_null()))
+        else {
+            dump_error("TypeError: Cannot read properties of undefined (reading 'port')");
+            return;
+        };
+        let (mut v_s1, mut v_s2) = (v_s1.clone(), v_s2.clone());
+        if !p_server.cfg.is_true("allow_udpproxy_fixed_port") {
+            // the unit cannot choose its ports
+            if !v_s1.is_object() || !v_s2.is_object() {
+                dump_error("TypeError: Cannot create property 'port' on primitive");
+                return;
+            }
+            set_field(&mut v_s1, "port", json!(0));
+            set_field(&mut v_s2, "port", json!(0));
+        }
+        // pairs are per account: same-named units in two accounts must not share one
+        let v_reply = p_server.udp.get_udp_socket(p_server, v_name.as_ref(), &v_s1, &v_s2, v_account.as_ref()).await;
+        if v_reply.get("en") == Some(&Value::Bool(false)) {
+            let v_closed = p_server.udp.close_udp_socket(p_server, v_name.as_ref(), v_account.as_ref()).await;
+            fn_reply(&mut p_jmsg, v_closed);
+        } else {
+            fn_reply(&mut p_jmsg, v_reply);
+        }
+    } else if field(&v_ms, "en") == Some(&Value::Bool(false)) {
+        let v_closed = p_server.udp.close_udp_socket(p_server, v_name.as_ref(), v_account.as_ref()).await;
+        fn_reply(&mut p_jmsg, v_closed);
+    }
+}
+
+/// onSystemMessage
+pub fn on_system_message(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg: Value) {
+    let v_mt = p_jmsg.get(CONST_WS_MESSAGE_ID).cloned();
+    let v_mt_num = match &v_mt {
+        Some(Value::Number(n)) => n.as_f64(),
+        _ => None,
+    };
+    if v_mt.as_ref().and_then(Value::as_str) == Some("ver") {
+        // `version` is not defined in the JavaScript handler: it throws before replying
+        dump_error("ReferenceError: version is not defined");
+        return;
+    }
+    let Some(v_mt_num) = v_mt_num else { return };
+    if v_mt_num.fract() != 0.0 {
+        return;
+    }
+    match v_mt_num as i64 {
+        CONST_TYPE_ANDRUAV_SYSTEM_UDP_PROXY => {
+            let v_ms = p_jmsg.get("ms");
+            let v_en = if js_truthy(v_ms) { field(v_ms.unwrap(), "en").cloned() } else { v_ms.cloned() };
+            let v_actor = p_ctx.login.as_ref().map(|l| l.actor_type.clone()).unwrap_or(None);
+            let v_name = js_interp(p_ctx.name.as_ref());
+            println!(
+                "UdpProxy request from '{}' en={} actorType={}",
+                v_name,
+                js_interp(v_en.as_ref()),
+                if p_ctx.login.is_some() { js_interp(v_actor.as_ref()) } else { "null".into() }
+            );
+            if !p_ctx.login.as_ref().map(|l| l.actor_is(CONST_ACTOR_TYPE_DRONE)).unwrap_or(false) {
+                // only a vehicle can create a udp proxy
+                println!("UdpProxy request from '{}' REJECTED: not a drone actorType", v_name);
+                return;
+            }
+            if p_server.relay.is_enabled() {
+                let v_server = p_server.clone();
+                tokio::spawn(async move {
+                    crate::s2s::udp_relay_client::handle_unit_request(&v_server, p_ctx, p_jmsg).await;
+                });
+            } else {
+                let v_server = p_server.clone();
+                tokio::spawn(async move { handle_builtin_udp_proxy(&v_server, &p_ctx, p_jmsg).await });
+            }
+        }
+        CONST_TYPE_ANDRUAV_SYSTEM_UDP_PROXY_PEER => {
+            let v_server = p_server.clone();
+            tokio::spawn(async move {
+                crate::s2s::udp_relay_client::handle_gcs_peer_request(&v_server, p_ctx, p_jmsg).await;
+            });
+        }
+        CONST_TYPE_ANDRUAV_SYSTEM_PING => {
+            match p_jmsg.get_mut("ms") {
+                Some(Value::Object(ms)) => {
+                    ms.insert("s".into(), json!("OK:pong"));
+                    // CLOCK.md T2: the server clock, for the units' fleet clock sync
+                    ms.insert("ts".into(), json!(now_ms()));
+                }
+                Some(Value::Array(_)) => {}
+                _ => {
+                    dump_error("TypeError: Cannot set properties of undefined (setting 's')");
+                    return;
+                }
+            }
+            p_ctx.handle.send_json(&p_jmsg);
+        }
+        CONST_TYPE_ANDRUAV_SYSTEM_LOGOUT_COMM_SERVER => {
+            p_server.hub().del_member_from_group(p_ctx.conn);
+            set_field(&mut p_jmsg, "ms", json!({ "s": "OK:dell" }));
+            p_ctx.handle.send_json(&p_jmsg);
+        }
+        CONST_TYPE_ANDRUAV_SYSTEM_LOAD_TASKS => tasks::handle_load_tasks(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_SAVE_TASKS => tasks::handle_save_tasks(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_DELETE_TASKS => tasks::handle_delete_tasks(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_DISABLE_TASKS => tasks::handle_disable_tasks(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_LOAD_MISSION => tasks::handle_load_mission(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_SAVE_MISSION => tasks::handle_save_mission(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_DELETE_MISSION => tasks::handle_delete_mission(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_QUERY_SERVER => query_server::handle_query_server(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_LOAD_NEWS => news::handle_load_news(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_SAVE_NEWS => news::handle_save_news(p_server, p_ctx, p_jmsg),
+        CONST_TYPE_ANDRUAV_SYSTEM_DELETE_NEWS => news::handle_delete_news(p_server, p_ctx, p_jmsg),
+        _ => {}
+    }
+}

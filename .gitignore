@@ -35,3 +35,6 @@ src/test/*.o
 
 # S2S shared secret (chmod 600 — never commit)
 s2s_shared_secret.key
+
+# Rust build output
+target/

@@ -1,10 +1,12 @@
-# pure-gates - every push, pure logic only.
+# pure-gates - every push.
 #
-#   tests    `node --test test/unit/**/*.test.js` - the unit suite,
-#            in-process. Integration scripts under test/ that need a
-#            live comm server are NOT part of the gate.
+#   fmt      cargo fmt --check
+#   clippy   cargo clippy --all-targets, warnings are errors
+#   tests    cargo test - unit and integration tests, in-process (the
+#            UDP relay tests skip when no relay binary is available; set
+#            DE_UDP_RELAY_BIN to run them).
 #
-# No servers, no SITL, no sim bring-up.
+# No external servers, no SITL, no sim bring-up.
 name: pure-gates
 on: [push, pull_request]
 
@@ -14,26 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
+      - name: toolchain
+        run: rustup update stable && rustup default stable && rustup component add rustfmt clippy
 
-      # the runner has no ssh key - rewrite the git+ssh server_common
-      # dependency to https. With a SERVER_COMMON_PAT secret (PAT with
-      # read access) it pulls the private prv_droneengage_server_common;
-      # otherwise it falls back to the public DroneEngage repo (same
-      # v1.0.0 tag today).
-      - name: git+ssh -> https for CI
-        run: |
-          if [ -n "${{ secrets.SERVER_COMMON_PAT }}" ]; then
-            sed -i 's|git+ssh://git@github.com:DroneEngage/droneengage_server_common.git|git+https://x-access-token:${{ secrets.SERVER_COMMON_PAT }}@github.com/HefnySco/prv_droneengage_server_common.git|' package.json
-          else
-            sed -i 's|git+ssh://git@github.com:|git+https://github.com/|g' package.json
-          fi
+      - name: fmt
+        run: cargo fmt --check
 
-      # package-lock.json is gitignored in this repo - npm install, not ci
-      - name: install
-        run: npm install --no-audit --no-fund
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
 
-      - name: unit tests
-        run: npm test
+      - name: tests
+        run: cargo test
