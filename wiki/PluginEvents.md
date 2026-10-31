@@ -375,7 +375,7 @@ still does that.
 
 ### 5.1 The sim plugin
 
-`droneengage_simulation_land/engine/server_plugins/de_sim_events/` is an
+`droneengage_studio/engine/server_plugins/de_sim_events/` is an
 ordinary `api: 1` plugin. It lives in the sim repo because it's sim-specific,
 and it uses only the public API.
 

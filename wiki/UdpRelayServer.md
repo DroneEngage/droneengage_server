@@ -500,7 +500,7 @@ The relay can't see websockets, so presence comes from the owner:
 
 ### 8.2 Simulator
 
-Using `droneengage_simulation_land/docs/real_servers_mesh.md` and
+Using `droneengage_studio/docs/real_servers_mesh.md` and
 `docs/port_allocation.md`:
 
 - **A new node type** in the `servers:` topology:

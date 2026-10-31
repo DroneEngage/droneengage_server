@@ -16,7 +16,7 @@ name = "andruavmainserver"
 path = "src/main.rs"
 
 [dependencies]
-droneengage_server_common = { git = "https://github.com/HefnySco/prv_droneengage_server_common", branch = "pr_rust" }
+droneengage_server_common = { path = "../droneengage_server_common" }
 base64 = "0.22"
 ed25519-dalek = { version = "2.1", features = ["pkcs8", "pem", "rand_core"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }

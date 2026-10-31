@@ -1,0 +1,11 @@
+{
+  "name": "andruav-plugins",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DroneEngage command processing plugins (add-on)",
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "jspack": "^0.0.4",
+    "zeromq": "^6.5.0"
+  }
+}

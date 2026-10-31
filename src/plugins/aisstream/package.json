@@ -1,0 +1,12 @@
+{
+  "name": "droneengage-aisstream-plugin",
+  "version": "1.0.0",
+  "description": "AIS stream plugin for DroneEngage Communication Server. Connects to aisstream.io WebSocket and forwards AIS data to subscribed GCS clients via DroneEngage system messages.",
+  "main": "index.js",
+  "author": "Mohammad Hefny",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "ws": "^8.16.0"
+  }
+}
