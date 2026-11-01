@@ -1,0 +1,23 @@
+{
+    // Standalone benchmark config for the communication server.
+    // Run from the repo root so ./ssl_local paths resolve:
+    //   target/release/andruavmainserver --config=tests/bench/server.config.bench
+    //
+    // Local-mode login: no AUTH, no storage, no plugins — pure routing.
+    "server_id"                     : "DE_CommSrv_Bench",
+    "server_ip"                     : "127.0.0.1",
+    "server_port"                   : 19966,
+    "local_server_enabled"          : true,
+    "ignore_auth_server"            : true,
+    "enable_storage_server"         : false,
+    "ssl_key_file"                  : "./ssl_local/ssl_airgap/domain.key",
+    "ssl_cert_file"                 : "./ssl_local/ssl_airgap/domain.crt",
+    "allow_fake_SSL"                : true,
+    "ignoreLoadingTasks"            : true,
+    "command_plugin"                : [],
+    "udp_relay"                     : [],
+    "ws_compression"                : false,
+    "ignoreLog"                     : true,
+    "log_detailed"                  : false,
+    "debug_logging"                 : false
+}
