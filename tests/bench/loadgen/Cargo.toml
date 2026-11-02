@@ -1,0 +1,17 @@
+[package]
+name = "de_loadgen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "DroneEngage comm-server benchmark load client (see tests/bench/README.md)"
+
+[[bin]]
+name = "de_loadgen"
+path = "src/main.rs"
+
+[dependencies]
+droneengage_server_common = { path = "../../../../droneengage_server_common" }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.30"

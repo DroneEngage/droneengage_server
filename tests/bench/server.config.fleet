@@ -1,0 +1,39 @@
+{
+    // Multi-account benchmark config: the REAL login path (no
+    // local_server_enabled). The comm server dials the stub AUTH that
+    // de_loadgen runs on s2s_ws_target_ip:s2s_ws_target_port — the stub
+    // announces each login and the party presents the temp key.
+    // Run from the repo root so ./ssl_local paths resolve:
+    //   target/release/andruavmainserver --config=tests/bench/server.config.fleet
+    //   tests/bench/loadgen/target/release/de_loadgen \
+    //       --auth 127.0.0.1:19970 --fleet "accA:7:2,accB:3:1" --mode broadcast
+    "server_id"                     : "DE_CommSrv_Bench",
+    "server_ip"                     : "127.0.0.1",
+    "public_host"                   : "127.0.0.1",
+    "server_port"                   : 19966,
+    "local_server_enabled"          : false,
+    "ignore_auth_server"            : false,
+    "s2s_ws_target_ip"              : "127.0.0.1",
+    "s2s_ws_target_port"            : "19970",
+    "enable_storage_server"         : false,
+    "ssl_key_file"                  : "./ssl_local/ssl_airgap/domain.key",
+    "ssl_cert_file"                 : "./ssl_local/ssl_airgap/domain.crt",
+    "allow_fake_SSL"                : true,
+    "ignoreLoadingTasks"            : true,
+    "command_plugin"                : [],
+    "udp_relay"                     : [],
+    "ws_compression"                : false,
+    "ignoreLog"                     : true,
+    "log_detailed"                  : false,
+    "debug_logging"                 : false,
+    // same backpressure bands as server.config; the bench telemetry types
+    // (2022 LightTelemetry text, 6502 MAVLINK binary) are latest_wins there,
+    // and 9999 marks the droppable p2p echo so a flooded drone socket is
+    // skipped, not terminated
+    "outbound_guard"                : {
+        "enabled"               : true,
+        "high_water_bytes"      : 262144,
+        "hard_cap_bytes"        : 4194304,
+        "latest_wins_message_types" : [2022, 6502, 9999]
+    }
+}
