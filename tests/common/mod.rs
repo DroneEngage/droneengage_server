@@ -101,7 +101,7 @@ pub struct Party<'a> {
     pub actor: &'a str,
     pub account: Value,
     pub group: Value,
-    pub prm: Value,
+    pub prm: Option<Value>,
     pub ip: Option<&'a str>,
 }
 
@@ -112,7 +112,7 @@ impl<'a> Party<'a> {
             actor: p_actor,
             account: json!("acc1"),
             group: json!("g1"),
-            prm: json!(0xffff_ffffu64),
+            prm: Some(json!(0xffff_ffffu64)),
             ip: None,
         }
     }
@@ -128,7 +128,13 @@ impl<'a> Party<'a> {
     }
 
     pub fn prm(mut self, p_prm: Value) -> Self {
-        self.prm = p_prm;
+        self.prm = Some(p_prm);
+        self
+    }
+
+    /// A login AUTH granted no permission.
+    pub fn no_prm(mut self) -> Self {
+        self.prm = None;
         self
     }
 
@@ -149,7 +155,7 @@ pub fn connect(p_server: &Arc<Server>, p_party: Party) -> FakeClient {
         group_id: Some(p_party.group),
         request_id: Some(json!(p_party.name)),
         actor_type: Some(json!(p_party.actor)),
-        prm: Some(p_party.prm),
+        prm: p_party.prm,
         creation_date: 0,
     });
     v_client.status = Some(Status::default());

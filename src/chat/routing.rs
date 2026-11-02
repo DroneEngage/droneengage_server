@@ -3,6 +3,7 @@
 //! group broadcasts, to one unit, or handled as system commands.
 
 use serde_json::Value;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::chat::outbound_guard::MsgClass;
@@ -11,13 +12,382 @@ use crate::chat::Ctx;
 use crate::constants::*;
 use crate::hub::{GroupRef, Hub, Payload};
 use crate::server::Server;
-use crate::util::{js_length, js_parse_bytes, js_stringify, set_field_opt};
+use crate::util::{js_length, js_parse, js_stringify, set_field_opt};
 
 fn split_header(p_data: &[u8]) -> (&[u8], Option<usize>) {
     match p_data.iter().position(|b| *b == 0) {
         Some(i) => (&p_data[..i], Some(i)),
         None => (p_data, None),
     }
+}
+
+/// serde_json's nesting limit: a frame this deep is not valid to us either.
+const MAX_JSON_DEPTH: usize = 128;
+/// A number this short without an exponent cannot overflow a double.
+const SHORT_NUMBER_LEN: usize = 18;
+
+/// A cursor over JSON text that accepts exactly what serde_json accepts,
+/// without building anything.
+struct JsonCursor<'a> {
+    text: &'a str,
+    i: usize,
+}
+
+impl JsonCursor<'_> {
+    fn peek(&self) -> Option<u8> {
+        self.text.as_bytes().get(self.i).copied()
+    }
+
+    fn skip_ws(&mut self) {
+        while matches!(self.peek(), Some(b' ' | b'\n' | b'\r' | b'\t')) {
+            self.i += 1;
+        }
+    }
+
+    fn eat(&mut self, p_byte: u8) -> Option<()> {
+        (self.peek()? == p_byte).then(|| self.i += 1)
+    }
+
+    fn hex4(&mut self) -> Option<u32> {
+        let v_digits = self.text.as_bytes().get(self.i..self.i + 4)?;
+        let mut v_out = 0;
+        for d in v_digits {
+            v_out = v_out * 16 + (*d as char).to_digit(16)?;
+        }
+        self.i += 4;
+        Some(v_out)
+    }
+
+    /// At an opening quote: past the closing one. Returns whether the string
+    /// has an escape, so its text is not its value.
+    fn string(&mut self) -> Option<bool> {
+        self.eat(b'"')?;
+        let mut v_escaped = false;
+        loop {
+            let v_byte = self.peek()?;
+            self.i += 1;
+            match v_byte {
+                b'"' => return Some(v_escaped),
+                b'\\' => {
+                    v_escaped = true;
+                    let v_kind = self.peek()?;
+                    self.i += 1;
+                    match v_kind {
+                        b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => {}
+                        b'u' => match self.hex4()? {
+                            0xDC00..=0xDFFF => return None,
+                            0xD800..=0xDBFF => {
+                                self.eat(b'\\')?;
+                                self.eat(b'u')?;
+                                if !(0xDC00..=0xDFFF).contains(&self.hex4()?) {
+                                    return None;
+                                }
+                            }
+                            _ => {}
+                        },
+                        _ => return None,
+                    }
+                }
+                0..=0x1f => return None,
+                _ => {}
+            }
+        }
+    }
+
+    fn digits(&mut self) -> Option<()> {
+        self.peek().filter(u8::is_ascii_digit)?;
+        while self.peek().is_some_and(|b| b.is_ascii_digit()) {
+            self.i += 1;
+        }
+        Some(())
+    }
+
+    fn number(&mut self) -> Option<()> {
+        let v_start = self.i;
+        if self.peek() == Some(b'-') {
+            self.i += 1;
+        }
+        if self.peek() == Some(b'0') {
+            self.i += 1;
+        } else {
+            self.digits()?;
+        }
+        if self.peek() == Some(b'.') {
+            self.i += 1;
+            self.digits()?;
+        }
+        let mut v_exponent = false;
+        if matches!(self.peek(), Some(b'e' | b'E')) {
+            v_exponent = true;
+            self.i += 1;
+            if matches!(self.peek(), Some(b'+' | b'-')) {
+                self.i += 1;
+            }
+            self.digits()?;
+        }
+        // only a long number or an exponent can be out of range
+        let v_token = &self.text[v_start..self.i];
+        if v_exponent || v_token.len() > SHORT_NUMBER_LEN {
+            js_parse(v_token)?;
+        }
+        Some(())
+    }
+
+    fn literal(&mut self, p_word: &str) -> Option<()> {
+        self.text[self.i..].starts_with(p_word).then(|| self.i += p_word.len())
+    }
+
+    fn value(&mut self, p_depth: usize) -> Option<()> {
+        match self.peek()? {
+            b'{' => self.object(p_depth, |_, _, _, _| {}).map(|_| ()),
+            b'[' => {
+                let v_depth = p_depth.checked_sub(1).filter(|d| *d > 0)?;
+                self.i += 1;
+                self.skip_ws();
+                if self.peek()? == b']' {
+                    self.i += 1;
+                    return Some(());
+                }
+                loop {
+                    self.skip_ws();
+                    self.value(v_depth)?;
+                    self.skip_ws();
+                    match self.peek()? {
+                        b',' => self.i += 1,
+                        b']' => {
+                            self.i += 1;
+                            return Some(());
+                        }
+                        _ => return None,
+                    }
+                }
+            }
+            b'"' => self.string().map(|_| ()),
+            b't' => self.literal("true"),
+            b'f' => self.literal("false"),
+            b'n' => self.literal("null"),
+            b'-' | b'0'..=b'9' => self.number(),
+            _ => None,
+        }
+    }
+
+    /// At '{': past the matching '}'. Calls p_member with each member's
+    /// (key text with quotes, escaped, member start, value start) and returns
+    /// the index of the closing '}' and the member count.
+    fn object(&mut self, p_depth: usize, mut p_member: impl FnMut(&str, bool, usize, usize)) -> Option<(usize, usize)> {
+        let v_depth = p_depth.checked_sub(1).filter(|d| *d > 0)?;
+        self.eat(b'{')?;
+        self.skip_ws();
+        if self.peek()? == b'}' {
+            self.i += 1;
+            return Some((self.i - 1, 0));
+        }
+        let mut v_members = 0;
+        loop {
+            self.skip_ws();
+            let v_key_start = self.i;
+            let v_escaped = self.string()?;
+            let v_key_end = self.i;
+            self.skip_ws();
+            self.eat(b':')?;
+            self.skip_ws();
+            let v_value_start = self.i;
+            self.value(v_depth)?;
+            p_member(&self.text[v_key_start..v_key_end], v_escaped, v_key_start, v_value_start);
+            v_members += 1;
+            self.skip_ws();
+            match self.peek()? {
+                b',' => self.i += 1,
+                b'}' => {
+                    self.i += 1;
+                    return Some((self.i - 1, v_members));
+                }
+                _ => return None,
+            }
+        }
+    }
+}
+
+/// What a frame's JSON header is, and where the fields routing reads are.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderKind {
+    Object,
+    /// not routed and gets no permission; plugins still see it
+    Array,
+    /// null, a string, a number or a boolean: dropped
+    Other,
+}
+
+/// A validated JSON header, scanned without building a Value. For a key that
+/// appears twice the last one counts, as in JSON.parse.
+pub struct ScannedHeader<'a> {
+    text: &'a str,
+    pub kind: HeaderKind,
+    /// index of the object's closing '}'
+    close: usize,
+    members: usize,
+    p_count: usize,
+    ty: Option<usize>,
+    tg: Option<usize>,
+    mt: Option<usize>,
+    sd: Option<usize>,
+    aid: Option<usize>,
+    gid: Option<usize>,
+    path: Option<usize>,
+}
+
+/// None when p_text is not valid JSON (serde_json's rules, its depth limit too).
+pub fn scan_header(p_text: &str) -> Option<ScannedHeader<'_>> {
+    let mut v_out = ScannedHeader {
+        text: p_text,
+        kind: HeaderKind::Other,
+        close: 0,
+        members: 0,
+        p_count: 0,
+        ty: None,
+        tg: None,
+        mt: None,
+        sd: None,
+        aid: None,
+        gid: None,
+        path: None,
+    };
+    let mut c = JsonCursor { text: p_text, i: 0 };
+    c.skip_ws();
+    match c.peek()? {
+        b'{' => {
+            let (v_close, v_members) = c.object(MAX_JSON_DEPTH, |p_key, p_escaped, _, p_value| {
+                let v_key = if p_escaped { js_parse(p_key).and_then(|k| k.as_str().map(str::to_string)) } else { None };
+                let v_name = v_key.as_deref().unwrap_or(&p_key[1..p_key.len() - 1]);
+                match v_name {
+                    "p" => v_out.p_count += 1,
+                    CONST_WS_MSG_ROUTING => v_out.ty = Some(p_value),
+                    CONST_WS_TARGET_ID => v_out.tg = Some(p_value),
+                    CONST_WS_MESSAGE_ID => v_out.mt = Some(p_value),
+                    CONST_WS_SENDER_ID => v_out.sd = Some(p_value),
+                    "_aid" => v_out.aid = Some(p_value),
+                    "_gid" => v_out.gid = Some(p_value),
+                    "_path" => v_out.path = Some(p_value),
+                    _ => {}
+                }
+            })?;
+            v_out.kind = HeaderKind::Object;
+            v_out.close = v_close;
+            v_out.members = v_members;
+        }
+        b'[' => {
+            c.value(MAX_JSON_DEPTH)?;
+            v_out.kind = HeaderKind::Array;
+        }
+        _ => c.value(MAX_JSON_DEPTH)?,
+    }
+    c.skip_ws();
+    (c.peek().is_none()).then_some(v_out)
+}
+
+impl ScannedHeader<'_> {
+    /// The value starting at p_start, parsed on its own.
+    fn value_at(&self, p_start: Option<usize>) -> Option<Value> {
+        let mut c = JsonCursor { text: self.text, i: p_start? };
+        c.value(MAX_JSON_DEPTH)?;
+        js_parse(&self.text[p_start?..c.i])
+    }
+
+    /// `ty` when it is a string.
+    pub fn routing(&self) -> Option<Cow<'_, str>> {
+        let v_start = self.ty?;
+        let mut c = JsonCursor { text: self.text, i: v_start };
+        if self.text.as_bytes()[v_start] != b'"' {
+            return None;
+        }
+        if c.string()? {
+            return js_parse(&self.text[v_start..c.i]).and_then(|v| v.as_str().map(|s| Cow::Owned(s.to_string())));
+        }
+        Some(Cow::Borrowed(&self.text[v_start + 1..c.i - 1]))
+    }
+
+    pub fn target(&self) -> Option<Value> {
+        self.value_at(self.tg)
+    }
+
+    pub fn message_id(&self) -> Option<Value> {
+        self.value_at(self.mt)
+    }
+
+    pub fn sender(&self) -> Option<Value> {
+        self.value_at(self.sd)
+    }
+
+    pub fn account_id(&self) -> Option<Value> {
+        self.value_at(self.aid)
+    }
+
+    pub fn group_id(&self) -> Option<Value> {
+        self.value_at(self.gid)
+    }
+
+    pub fn path(&self) -> Option<Value> {
+        self.value_at(self.path)
+    }
+
+    /// The header with p_prm as its only top-level `p`, under any spelling of
+    /// the key: this is the only guard against a client faking its permission.
+    /// No permission means no `p` at all. Anything but an object is unchanged.
+    pub fn with_permission(&self, p_prm: Option<&Value>) -> String {
+        if self.kind != HeaderKind::Object {
+            return self.text.to_string();
+        }
+        let v_prm = p_prm.map(js_stringify);
+        let mut v_out = String::with_capacity(self.text.len() + 16);
+        if self.p_count == 0 {
+            let Some(v_prm) = v_prm else { return self.text.to_string() };
+            v_out.push_str(&self.text[..self.close]);
+            if self.members > 0 {
+                v_out.push(',');
+            }
+            v_out.push_str("\"p\":");
+            v_out.push_str(&v_prm);
+            v_out.push_str(&self.text[self.close..]);
+            return v_out;
+        }
+        // a client-sent p: keep every other member and drop all of its copies
+        let mut v_starts = Vec::with_capacity(self.members);
+        let mut c = JsonCursor { text: self.text, i: self.text.find('{').unwrap_or(0) };
+        let _ = c.object(MAX_JSON_DEPTH, |p_key, p_escaped, p_start, _| {
+            let v_is_p = if p_escaped { js_parse(p_key).is_some_and(|k| k == "p") } else { p_key == "\"p\"" };
+            v_starts.push((p_start, v_is_p));
+        });
+        v_out.push('{');
+        let mut v_first = true;
+        for (i, (v_start, v_is_p)) in v_starts.iter().enumerate() {
+            if *v_is_p {
+                continue;
+            }
+            let v_next = v_starts.get(i + 1).map(|n| n.0).unwrap_or(self.close);
+            // a member runs up to the next one, less its comma and whitespace
+            let v_member = self.text[*v_start..v_next].trim_end_matches([' ', '\n', '\r', '\t', ',']);
+            if !v_first {
+                v_out.push(',');
+            }
+            v_out.push_str(v_member);
+            v_first = false;
+        }
+        if let Some(v_prm) = v_prm {
+            if !v_first {
+                v_out.push(',');
+            }
+            v_out.push_str("\"p\":");
+            v_out.push_str(&v_prm);
+        }
+        v_out.push('}');
+        v_out
+    }
+}
+
+/// A frame's header as text: invalid UTF-8 becomes U+FFFD, as Buffer.toString()
+/// does, so a receiver never gets invalid UTF-8 in JSON.
+fn header_text(p_header: &[u8]) -> Cow<'_, str> {
+    String::from_utf8_lossy(p_header)
 }
 
 /// What `v_jmsg['tg']` selects in the 'i' routing.
@@ -29,8 +399,8 @@ enum Target<'a> {
     Named(&'a Value),
 }
 
-fn target(p_jmsg: &Value) -> Target<'_> {
-    match p_jmsg.as_object().and_then(|o| o.get(CONST_WS_TARGET_ID)) {
+fn target(p_tg: Option<&Value>) -> Target<'_> {
+    match p_tg {
         None => Target::None,
         Some(Value::Null) => Target::Throws,
         Some(v) => match js_length(Some(v)) {
@@ -56,15 +426,14 @@ fn deliver_external_broadcast(
     p_hub: &mut Hub,
     p_msg: &Payload,
     p_sender: Option<&Value>,
-    p_jmsg: &Value,
+    p_aid: Option<&Value>,
+    p_gid: Option<&Value>,
     p_actor: Option<&str>,
     p_class: MsgClass,
 ) {
-    let v_aid = p_jmsg.get("_aid");
-    let v_gid = p_jmsg.get("_gid");
-    if v_aid.is_some()
-        && v_gid.is_some()
-        && p_hub.send_to_account_group(&p_server.guard, p_msg, true, p_sender, v_aid, v_gid, p_actor, p_class)
+    if p_aid.is_some()
+        && p_gid.is_some()
+        && p_hub.send_to_account_group(&p_server.guard, p_msg, true, p_sender, p_aid, p_gid, p_actor, p_class)
     {
         return;
     }
@@ -80,34 +449,38 @@ fn deliver_external_broadcast(
 /// Buffer), so p_binary is true for them.
 pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: bool, p_source: Option<Source>) {
     let (v_header, _) = if p_binary { split_header(p_data) } else { (p_data, None) };
-    let Some(v_jmsg) = js_parse_bytes(v_header) else { return };
-    if v_jmsg.is_null() {
+    let v_text = header_text(v_header);
+    let Some(v_scan) = scan_header(&v_text) else { return };
+    // anything but an object has no ty: nothing to deliver or relay
+    if v_scan.kind != HeaderKind::Object {
         return;
     }
-    let v_sender = v_jmsg.get(CONST_WS_SENDER_ID).cloned();
+    let v_sender = v_scan.sender();
     // loop prevention: this server already relayed it
-    if let Some(Value::Array(v_path)) = v_jmsg.get("_path") {
+    if let Some(Value::Array(v_path)) = v_scan.path() {
         let v_me = p_server.origin_id();
         if v_path.iter().any(|p| p.as_str() == Some(v_me.as_str())) {
             return;
         }
     }
-    let v_class = p_server.guard.message_class(v_jmsg.get(CONST_WS_MESSAGE_ID));
+    let v_class = p_server.guard.message_class(v_scan.message_id().as_ref());
+    let (v_aid, v_gid) = (v_scan.account_id(), v_scan.group_id());
     let v_msg = if p_binary {
         Payload::binary(p_data.to_vec())
     } else {
         Payload::text(String::from_utf8_lossy(p_data).into_owned())
     };
 
-    let v_ty = v_jmsg.get(CONST_WS_MSG_ROUTING).and_then(Value::as_str);
+    let v_ty = v_scan.routing();
+    let v_tg = v_scan.target();
     let v_forward = {
         let mut v_hub = p_server.hub();
-        match v_ty {
+        match v_ty.as_deref() {
             Some(CONST_WS_MSG_ROUTING_GROUP) => {
-                deliver_external_broadcast(p_server, &mut v_hub, &v_msg, v_sender.as_ref(), &v_jmsg, None, v_class);
+                deliver_external_broadcast(p_server, &mut v_hub, &v_msg, v_sender.as_ref(), v_aid.as_ref(), v_gid.as_ref(), None, v_class);
                 true
             }
-            Some(CONST_WS_MSG_ROUTING_INDIVIDUAL) => match target(&v_jmsg) {
+            Some(CONST_WS_MSG_ROUTING_INDIVIDUAL) => match target(v_tg.as_ref()) {
                 Target::Throws => {
                     println!("TypeError: Cannot read properties of null (reading 'length')");
                     p_server.log_error(
@@ -124,7 +497,8 @@ pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: b
                             &mut v_hub,
                             &v_msg,
                             v_sender.as_ref(),
-                            &v_jmsg,
+                            v_aid.as_ref(),
+                            v_gid.as_ref(),
                             Some("g"),
                             v_class,
                         );
@@ -136,7 +510,8 @@ pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: b
                             &mut v_hub,
                             &v_msg,
                             v_sender.as_ref(),
-                            &v_jmsg,
+                            v_aid.as_ref(),
+                            v_gid.as_ref(),
                             None,
                             v_class,
                         );
@@ -148,7 +523,8 @@ pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: b
                             &mut v_hub,
                             &v_msg,
                             v_sender.as_ref(),
-                            &v_jmsg,
+                            v_aid.as_ref(),
+                            v_gid.as_ref(),
                             Some("d"),
                             v_class,
                         );
@@ -162,7 +538,7 @@ pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: b
                             true,
                             Some(v_tg),
                             v_sender.as_ref(),
-                            v_jmsg.get("_gid"),
+                            v_gid.as_ref(),
                             v_class,
                         );
                         false
@@ -170,7 +546,7 @@ pub fn parse_external_message(p_server: &Arc<Server>, p_data: &[u8], p_binary: b
                 },
                 Target::None => {
                     // no target: everyone in the originating account/group
-                    deliver_external_broadcast(p_server, &mut v_hub, &v_msg, v_sender.as_ref(), &v_jmsg, None, v_class);
+                    deliver_external_broadcast(p_server, &mut v_hub, &v_msg, v_sender.as_ref(), v_aid.as_ref(), v_gid.as_ref(), None, v_class);
                     true
                 }
             },
@@ -215,31 +591,30 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
         } else {
             v_status.ttx += p_data.len() as u64;
         }
-        let Some(mut v_jmsg) = js_parse_bytes(v_header) else { return };
+        let v_text = header_text(v_header);
+        let Some(v_scan) = scan_header(&v_text) else { return };
         // inject the permission AUTH granted: the only way to make sure a
         // GCS can't fake it
         let Some(v_login) = v_client.login.clone() else { return };
-        match &mut v_jmsg {
-            Value::Object(_) => set_field_opt(&mut v_jmsg, "p", v_login.prm.clone()),
-            Value::Array(_) => {}
-            _ => return,
+        if v_scan.kind == HeaderKind::Other {
+            return;
         }
-        let v_text = js_stringify(&v_jmsg);
+        let v_frame = v_scan.with_permission(v_login.prm.as_ref());
         // where the 0 terminator lands now that the header has its new length
-        let v_frame_null_index = v_null_index.map(|_| v_text.len());
+        let v_frame_null_index = v_null_index.map(|_| v_frame.len());
         let v_msg = if p_binary {
-            let mut v_out = v_text.into_bytes();
+            let mut v_out = v_frame.into_bytes();
             if let Some(i) = v_null_index {
                 v_out.extend_from_slice(&p_data[i..]);
             }
             Payload::binary(v_out)
         } else {
-            Payload::text(v_text)
+            Payload::text(v_frame)
         };
 
         let v_plugin_account = if p_server.plugins.is_empty() { None } else { Some(v_login.account_id.clone()) };
 
-        let v_class = p_server.guard.message_class(v_jmsg.get(CONST_WS_MESSAGE_ID));
+        let v_class = p_server.guard.message_class(v_scan.message_id().as_ref());
         let v_group = v_client.group.clone();
         let v_sender = v_login.sender_id.clone();
         let v_is_gcs = v_login.actor_is(CONST_ACTOR_TYPE_GCS);
@@ -251,12 +626,14 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             }
         };
 
-        let v_route = match v_jmsg.get(CONST_WS_MSG_ROUTING).and_then(Value::as_str) {
+        let v_tg = v_scan.target();
+        let v_ty = v_scan.routing();
+        let v_route = match v_ty.as_deref() {
             Some(CONST_WS_MSG_ROUTING_GROUP) => {
                 fn_to_group(&mut v_hub, if v_is_gcs { None } else { Some("g") });
                 Route::Forward
             }
-            Some(CONST_WS_MSG_ROUTING_INDIVIDUAL) => match target(&v_jmsg) {
+            Some(CONST_WS_MSG_ROUTING_INDIVIDUAL) => match target(v_tg.as_ref()) {
                 Target::Throws => {
                     println!("TypeError: Cannot read properties of null (reading 'length')");
                     p_server.log_error(
@@ -310,7 +687,12 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
                 }
             },
             Some(CONST_WS_MSG_ROUTING_SYSTEM) => match Ctx::from_hub(&v_hub, p_conn) {
-                Some(c) => Route::System(Box::new((c, v_jmsg.clone()))),
+                Some(c) => {
+                    // the rare path: system commands read the whole message
+                    let Some(mut v_jmsg) = js_parse(&v_text) else { return };
+                    set_field_opt(&mut v_jmsg, "p", v_login.prm.clone());
+                    Route::System(Box::new((c, v_jmsg)))
+                }
                 None => Route::None,
             },
             _ => Route::None,

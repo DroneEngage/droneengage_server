@@ -67,7 +67,7 @@ async fn frame_and_query_logins_route_and_ping() {
     assert_eq!(next(&mut v_gcs).await["mt"], 9007);
     let mut v_drone = login_frame(v_port, "D1", "d").await;
     send(&mut v_drone, json!({ "ty": "g", "mt": 1002, "ms": { "lat": 1.0 } })).await;
-    assert_eq!(next(&mut v_gcs).await, json!({ "ty": "g", "mt": 1002, "ms": { "lat": 1 }, "p": 4294967295u64 }));
+    assert_eq!(next(&mut v_gcs).await, json!({ "ty": "g", "mt": 1002, "ms": { "lat": 1.0 }, "p": 4294967295u64 }));
     send(&mut v_gcs, json!({ "ty": "i", "tg": "D1", "mt": 1005 })).await;
     assert_eq!(next(&mut v_drone).await["mt"], 1005);
     send(&mut v_drone, json!({ "ty": "s", "mt": 9005, "ms": {} })).await;
