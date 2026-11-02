@@ -7,15 +7,17 @@
 //! WebSocket upgrade is answered like ws does (first offered subprotocol
 //! selected, no permessage-deflate), anything else gets Express's 404 page.
 
+use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::net::SocketAddr;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::{sleep_until, Instant};
 use tokio_tungstenite::tungstenite::handshake::derive_accept_key;
 use tokio_tungstenite::tungstenite::protocol::Role;
@@ -255,6 +257,73 @@ fn on_auth_frame(p_server: &Arc<Server>, p_conn: u64, p_handle: &ConnHandle, p_d
         send_auth_ack(p_handle, false, Some("auth rejected"));
         p_handle.close();
     }
+}
+
+/// One writer's batch limits: at most this many frames or this many bytes
+/// leave in a single flush. Without a bound a busy sender could keep one
+/// flush open forever.
+const WRITER_BATCH_FRAMES: usize = 64;
+const WRITER_BATCH_BYTES: usize = 64 * 1024;
+
+/// How many flushes the party writers have done (test instrumentation).
+pub static WRITER_FLUSHES: AtomicU64 = AtomicU64::new(0);
+
+/// The socket writer (one per party connection): takes queued frames,
+/// feeds everything already waiting — up to the batch limits — and flushes
+/// once. An empty queue flushes immediately, so a lone message pays no
+/// added latency and no timer is involved. p_buffered drops only after a
+/// flush succeeded, so outbound_guard's bufferedAmount stays accurate.
+/// Frames leave in order; a Close frame flushes what came before it, ends
+/// the writer, and anything queued after it is dropped — as before.
+pub async fn conn_writer<S>(
+    mut p_rx: UnboundedReceiver<Out>,
+    mut p_sink: SplitSink<WebSocketStream<S>, Message>,
+    p_buffered: Arc<AtomicUsize>,
+) -> SplitSink<WebSocketStream<S>, Message>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut v_batch: Vec<Out> = Vec::with_capacity(16);
+    while let Some(v_frame) = p_rx.recv().await {
+        // the queued batch: this frame plus whatever is already waiting
+        v_batch.clear();
+        let mut v_bytes = v_frame.len();
+        let mut v_close = matches!(v_frame, Out::Close);
+        v_batch.push(v_frame);
+        while !v_close && v_batch.len() < WRITER_BATCH_FRAMES && v_bytes < WRITER_BATCH_BYTES {
+            match p_rx.try_recv() {
+                Ok(v_frame) => {
+                    v_bytes += v_frame.len();
+                    v_close = matches!(v_frame, Out::Close);
+                    v_batch.push(v_frame);
+                }
+                Err(_) => break,
+            }
+        }
+        let mut v_ok = true;
+        for v_frame in v_batch.drain(..) {
+            let v_msg = match v_frame {
+                Out::Text(t) => Message::Text(t),
+                Out::Binary(b) => Message::Binary(b),
+                Out::Close => Message::Close(None),
+            };
+            if p_sink.feed(v_msg).await.is_err() {
+                v_ok = false;
+                break;
+            }
+        }
+        if v_ok {
+            v_ok = p_sink.flush().await.is_ok();
+        }
+        if v_ok {
+            p_buffered.fetch_sub(v_bytes.min(p_buffered.load(Ordering::SeqCst)), Ordering::SeqCst);
+            WRITER_FLUSHES.fetch_add(1, Ordering::Relaxed);
+        }
+        if !v_ok || v_close {
+            break;
+        }
+    }
+    p_sink
 }
 
 /// fn_onWsClose: cleans up after a socket — unless it was kicked out by a
@@ -514,7 +583,7 @@ async fn run_party<S>(p_server: Arc<Server>, p_ws: WebSocketStream<S>, p_head: R
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let (v_handle, mut v_out) = ConnHandle::new(Some(p_remote));
+    let (v_handle, v_out) = ConnHandle::new(Some(p_remote));
     let v_conn = v_handle.id;
     let v_ip = client_ip(
         p_server.cfg.is_true("trust_proxy_header"),
@@ -523,26 +592,10 @@ where
     );
     p_server.hub().clients.insert(v_conn, Client::new(v_handle.clone(), v_ip));
 
-    let (mut v_sink, mut v_source) = p_ws.split();
+    let (v_sink, mut v_source) = p_ws.split();
     // writer: frames leave in order; bufferedAmount drops as they are written
     let v_buffered = v_handle.buffered_counter();
-    let v_writer = tokio::spawn(async move {
-        while let Some(v_frame) = v_out.recv().await {
-            let v_len = v_frame.len();
-            let v_msg = match v_frame {
-                Out::Text(t) => Message::Text(t),
-                Out::Binary(b) => Message::Binary(b),
-                Out::Close => Message::Close(None),
-            };
-            let v_close = matches!(v_msg, Message::Close(_));
-            let v_ok = v_sink.send(v_msg).await.is_ok();
-            v_buffered.fetch_sub(v_len.min(v_buffered.load(Ordering::SeqCst)), Ordering::SeqCst);
-            if !v_ok || v_close {
-                break;
-            }
-        }
-        v_sink
-    });
+    let v_writer = tokio::spawn(conn_writer(v_out, v_sink, v_buffered));
 
     let v_params = header_params(&p_head.url);
     p_server.log_info("WS Created from Party", Some("fn_onConnect_Handler"), Some(&Value::Object(v_params.clone())));
