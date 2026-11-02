@@ -14,7 +14,6 @@
 
 use indexmap::{IndexMap, IndexSet};
 use serde_json::Value;
-use std::any::Any;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering};
@@ -256,8 +255,6 @@ pub struct Client {
     pub terminated: bool,
     /// m_remoteIp
     pub remote_ip: Option<String>,
-    /// per-plugin connection state (ws.m__status of a plugin)
-    pub plugin_state: Vec<Option<Box<dyn Any + Send>>>,
 }
 
 impl Client {
@@ -270,7 +267,6 @@ impl Client {
             status: None,
             terminated: false,
             remote_ip: p_remote_ip,
-            plugin_state: Vec::new(),
         }
     }
 

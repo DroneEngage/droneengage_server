@@ -225,6 +225,8 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             _ => return,
         }
         let v_text = js_stringify(&v_jmsg);
+        // where the 0 terminator lands now that the header has its new length
+        let v_frame_null_index = v_null_index.map(|_| v_text.len());
         let v_msg = if p_binary {
             let mut v_out = v_text.into_bytes();
             if let Some(i) = v_null_index {
@@ -235,7 +237,7 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             Payload::text(v_text)
         };
 
-        p_server.plugins.process(p_server, v_client, p_data, &v_jmsg, v_null_index);
+        p_server.plugins.dispatch(p_conn, v_login.account_id.as_ref(), &v_msg, v_frame_null_index);
 
         let v_class = p_server.guard.message_class(v_jmsg.get(CONST_WS_MESSAGE_ID));
         let v_group = v_client.group.clone();

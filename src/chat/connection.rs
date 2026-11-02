@@ -330,6 +330,7 @@ where
 /// newer login with the same senderID, whose state must not be torn down.
 pub fn on_close(p_server: &Arc<Server>, p_conn: u64) {
     let Some(v_client) = p_server.hub().clients.remove(&p_conn) else { return };
+    p_server.plugins.connection_closed(p_conn);
     if v_client.terminated {
         return;
     }
