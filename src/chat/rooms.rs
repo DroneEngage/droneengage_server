@@ -51,7 +51,7 @@ impl Hub {
         let mut v_out = Vec::new();
         for (a, v_account) in &self.accounts {
             for (g, v_group) in &v_account.groups {
-                v_out.push(GroupRef { account_key: a.clone(), group_key: g.clone(), uid: v_group.uid });
+                v_out.push(GroupRef { account_key: a.as_str().into(), group_key: g.as_str().into(), uid: v_group.uid });
             }
         }
         v_out
@@ -114,7 +114,7 @@ impl Hub {
         let v_groups: Vec<GroupRef> = v_account
             .groups
             .iter()
-            .map(|(g, gr)| GroupRef { account_key: v_key.clone(), group_key: g.clone(), uid: gr.uid })
+            .map(|(g, gr)| GroupRef { account_key: v_key.as_str().into(), group_key: g.as_str().into(), uid: gr.uid })
             .collect();
         for g in v_groups {
             self.group_broadcast(p_guard, &g, p_msg, p_binary, p_sender, Some("g"), p_class);
@@ -141,7 +141,7 @@ impl Hub {
         let Some(v_group) = self.accounts.get(&v_account_key).and_then(|a| a.groups.get(&v_group_key)) else {
             return false;
         };
-        let v_ref = GroupRef { account_key: v_account_key, group_key: v_group_key, uid: v_group.uid };
+        let v_ref = GroupRef { account_key: v_account_key.as_str().into(), group_key: v_group_key.as_str().into(), uid: v_group.uid };
         self.group_broadcast(p_guard, &v_ref, p_msg, p_binary, p_sender, p_actor, p_class);
         true
     }
@@ -222,7 +222,7 @@ impl Hub {
         }
         println!("addMember [{}] Added", v_unit_key);
         v_group.units.insert(v_unit_key, p_conn);
-        let v_ref = GroupRef { account_key: v_account_key, group_key: v_group_key, uid: v_group.uid };
+        let v_ref = GroupRef { account_key: v_account_key.as_str().into(), group_key: v_group_key.as_str().into(), uid: v_group.uid };
         let v_client = self.clients.get_mut(&p_conn).unwrap();
         v_client.name = v_login.sender_id.clone();
         v_client.group = Some(v_ref);
@@ -261,7 +261,7 @@ impl Hub {
         let v_groups: Vec<GroupRef> = v_account
             .groups
             .iter()
-            .map(|(g, gr)| GroupRef { account_key: v_account_key.clone(), group_key: g.clone(), uid: gr.uid })
+            .map(|(g, gr)| GroupRef { account_key: v_account_key.as_str().into(), group_key: g.as_str().into(), uid: gr.uid })
             .collect();
         let v_name = v_login.sender_key();
         for g in v_groups {
@@ -276,14 +276,14 @@ impl Hub {
     /// if it is not the caller's socket); an emptied group is removed from
     /// its account.
     pub fn delete_member_by_name(&mut self, p_group: &GroupRef, p_name: &str, p_terminate: bool) {
-        let Some(v_account) = self.accounts.get_mut(&p_group.account_key) else { return };
-        let Some(v_group) = v_account.groups.get_mut(&p_group.group_key).filter(|g| g.uid == p_group.uid) else {
+        let Some(v_account) = self.accounts.get_mut(&*p_group.account_key) else { return };
+        let Some(v_group) = v_account.groups.get_mut(&*p_group.group_key).filter(|g| g.uid == p_group.uid) else {
             return;
         };
         let Some(v_old) = v_group.units.shift_remove(p_name) else { return };
         println!("deleteMemberByName: deleteMember {}", p_name);
         if v_group.units.is_empty() {
-            v_account.groups.shift_remove(&p_group.group_key);
+            v_account.groups.shift_remove(&*p_group.group_key);
         }
         if let Some(v_client) = self.clients.get_mut(&v_old) {
             v_client.group = None;
@@ -308,14 +308,15 @@ impl Hub {
         p_actor: Option<&str>,
         p_class: MsgClass,
     ) {
-        let Some(v_group) = self.group(p_group) else { return };
-        let v_units: Vec<(String, u64)> = v_group.units.iter().map(|(n, c)| (n.clone(), *c)).collect();
-        for (v_name, v_conn) in v_units {
-            // a unit removed earlier in this loop is skipped (for...in)
-            if self.group(p_group).map(|g| g.units.get(&v_name) != Some(&v_conn)).unwrap_or(true) {
-                continue;
-            }
-            let Some(v_client) = self.clients.get_mut(&v_conn) else { continue };
+        let Some(v_group) = self.accounts.get(&*p_group.account_key).and_then(|a| a.groups.get(&*p_group.group_key))
+        else {
+            return;
+        };
+        // a socket found dead leaves the group after the loop: the only unit
+        // this could remove is one the loop has already passed (for...in)
+        let mut v_dead = Vec::new();
+        for v_conn in v_group.units.values() {
+            let Some(v_client) = self.clients.get_mut(v_conn) else { continue };
             let Some(v_login) = v_client.login.as_ref() else { continue };
             if js_strict_eq(v_login.sender_id.as_ref(), p_sender) {
                 continue;
@@ -326,8 +327,11 @@ impl Hub {
                 }
             }
             if p_guard.safe_send(v_client, p_msg, p_binary, p_class) == SendResult::Terminated {
-                self.handle_orphan(v_conn);
+                v_dead.push(*v_conn);
             }
+        }
+        for v_conn in v_dead {
+            self.handle_orphan(v_conn);
         }
     }
 

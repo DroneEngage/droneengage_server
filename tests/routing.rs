@@ -457,3 +457,48 @@ async fn a_binary_header_with_invalid_utf8_reaches_receivers_as_valid_utf8() {
     assert_eq!(serde_json::from_str::<Value>(v_text).unwrap(), serde_json::from_str::<Value>(&v_old).unwrap());
     assert_eq!(&v_bytes[i + 1..], &[1, 2, 3]);
 }
+
+// ---- the hub is not held while a frame is built ----
+
+#[tokio::test]
+async fn busy_senders_side_by_side_keep_their_own_order_and_lose_nothing() {
+    let v_srv = server(json!({}));
+    let mut v_gcs = connect(&v_srv, Party::new("GCS", "g"));
+    let v_per_sender: i64 = 500;
+    let v_threads: Vec<_> = (0..8)
+        .map(|n| {
+            let v_srv = v_srv.clone();
+            let v_name = format!("D{}", n);
+            let v_drone = connect(&v_srv, Party::new(&v_name, "d"));
+            std::thread::spawn(move || {
+                for i in 0..v_per_sender {
+                    let v_frame = format!(r#"{{"ty":"g","mt":1,"sd":"D{}","n":{}}}"#, n, i);
+                    andruavserver::chat::routing::parse_message(&v_srv, v_drone.conn, v_frame.as_bytes(), false);
+                }
+            })
+        })
+        .collect();
+    for t in v_threads {
+        t.join().unwrap();
+    }
+    let v_got = v_gcs.sent();
+    assert_eq!(v_got.len() as i64, 8 * v_per_sender, "nothing lost");
+    for n in 0..8 {
+        let v_name = format!("D{}", n);
+        let v_seq: Vec<i64> = v_got.iter().filter(|m| m["sd"] == v_name.as_str()).map(|m| m["n"].as_i64().unwrap()).collect();
+        assert_eq!(v_seq, (0..v_per_sender).collect::<Vec<i64>>(), "{} out of order", v_name);
+    }
+}
+
+#[tokio::test]
+async fn a_message_from_a_socket_that_left_its_group_reaches_nobody() {
+    let v_srv = server(json!({}));
+    let mut r = room(&v_srv);
+    let v_login = v_srv.hub().client(r.d1.conn).unwrap().login.clone();
+    v_srv.hub().del_member_from_account_by_name(v_login.as_ref(), true);
+    send(&v_srv, &r.d1, json!({ "ty": "g", "mt": 1 }));
+    assert!(r.g1.frames().is_empty());
+    andruavserver::chat::connection::on_close(&v_srv, r.d1.conn);
+    send(&v_srv, &r.d1, json!({ "ty": "g", "mt": 2 }));
+    assert!(r.g1.frames().is_empty());
+}

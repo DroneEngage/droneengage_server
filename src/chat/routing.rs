@@ -567,9 +567,16 @@ enum Route {
     System(Box<(Ctx, Value)>),
 }
 
-/// fn_parseMessage: a message from a local client socket.
+/// fn_parseMessage: a message from a local client socket. The hub is held
+/// twice and only for lookups and delivery: reading what the sender may do,
+/// then routing. Scanning the header and building the frame need neither, so
+/// busy connections do that work side by side. A socket's messages arrive one
+/// at a time from its read loop, so their order is kept.
 pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binary: bool) {
-    let (v_route, v_msg, v_group, v_plugin_frame) = {
+    let (v_header, v_null_index) =
+        if p_binary { split_header(p_data) } else { (p_data, p_data.iter().position(|b| *b == 0)) };
+    let v_plugins = !p_server.plugins.is_empty();
+    let (v_prm, v_sender, v_is_gcs, v_is_drone, v_account) = {
         let mut v_hub = p_server.hub();
         // admin-blocked units stay connected but their traffic is dropped
         let v_blocked = match v_hub.client(p_conn) {
@@ -580,8 +587,6 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             return;
         }
         let v_client = v_hub.client_mut(p_conn).unwrap();
-        let (v_header, v_null_index) =
-            if p_binary { split_header(p_data) } else { (p_data, p_data.iter().position(|b| *b == 0)) };
         let Some(v_status) = v_client.status.as_mut() else {
             // unauthorized socket (no m_status yet)
             return;
@@ -591,34 +596,55 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
         } else {
             v_status.ttx += p_data.len() as u64;
         }
-        let v_text = header_text(v_header);
-        let Some(v_scan) = scan_header(&v_text) else { return };
-        // inject the permission AUTH granted: the only way to make sure a
-        // GCS can't fake it
-        let Some(v_login) = v_client.login.clone() else { return };
-        if v_scan.kind == HeaderKind::Other {
-            return;
+        let Some(v_login) = v_client.login.as_ref() else { return };
+        (
+            v_login.prm.clone(),
+            v_login.sender_id.clone(),
+            v_login.actor_is(CONST_ACTOR_TYPE_GCS),
+            v_login.actor_is(CONST_ACTOR_TYPE_DRONE),
+            if v_plugins { v_login.account_id.clone() } else { None },
+        )
+    };
+
+    let v_text = header_text(v_header);
+    let Some(v_scan) = scan_header(&v_text) else { return };
+    if v_scan.kind == HeaderKind::Other {
+        return;
+    }
+    // inject the permission AUTH granted: the only way to make sure a
+    // GCS can't fake it
+    let v_frame = v_scan.with_permission(v_prm.as_ref());
+    // where the 0 terminator lands now that the header has its new length
+    let v_frame_null_index = v_null_index.map(|_| v_frame.len());
+    let v_msg = if p_binary {
+        let mut v_out = v_frame.into_bytes();
+        if let Some(i) = v_null_index {
+            v_out.extend_from_slice(&p_data[i..]);
         }
-        let v_frame = v_scan.with_permission(v_login.prm.as_ref());
-        // where the 0 terminator lands now that the header has its new length
-        let v_frame_null_index = v_null_index.map(|_| v_frame.len());
-        let v_msg = if p_binary {
-            let mut v_out = v_frame.into_bytes();
-            if let Some(i) = v_null_index {
-                v_out.extend_from_slice(&p_data[i..]);
-            }
-            Payload::binary(v_out)
-        } else {
-            Payload::text(v_frame)
-        };
+        Payload::binary(v_out)
+    } else {
+        Payload::text(v_frame)
+    };
+    if v_plugins {
+        p_server.plugins.dispatch(p_conn, v_account.as_ref(), &v_msg, v_frame_null_index);
+    }
+    let v_class = p_server.guard.message_class(v_scan.message_id().as_ref());
+    let v_tg = v_scan.target();
+    let v_ty = v_scan.routing();
+    // the rare path: system commands read the whole message
+    let mut v_system = None;
+    if v_ty.as_deref() == Some(CONST_WS_MSG_ROUTING_SYSTEM) {
+        let Some(mut v_jmsg) = js_parse(&v_text) else { return };
+        set_field_opt(&mut v_jmsg, "p", v_prm);
+        v_system = Some(v_jmsg);
+    }
+    let v_mesh = p_server.cfg.is_true("enable_super_server") || p_server.cfg.is_true("enable_persistant_relay");
 
-        let v_plugin_account = if p_server.plugins.is_empty() { None } else { Some(v_login.account_id.clone()) };
-
-        let v_class = p_server.guard.message_class(v_scan.message_id().as_ref());
+    let (v_route, v_group) = {
+        let mut v_hub = p_server.hub();
+        // the socket is routed as it is now: gone or out of its group, nothing is sent
+        let Some(v_client) = v_hub.client(p_conn) else { return };
         let v_group = v_client.group.clone();
-        let v_sender = v_login.sender_id.clone();
-        let v_is_gcs = v_login.actor_is(CONST_ACTOR_TYPE_GCS);
-        let v_is_drone = v_login.actor_is(CONST_ACTOR_TYPE_DRONE);
         let v_guard = &p_server.guard;
         let fn_to_group = |hub: &mut Hub, actor: Option<&str>| {
             if let Some(g) = &v_group {
@@ -626,8 +652,6 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             }
         };
 
-        let v_tg = v_scan.target();
-        let v_ty = v_scan.routing();
         let v_route = match v_ty.as_deref() {
             Some(CONST_WS_MSG_ROUTING_GROUP) => {
                 fn_to_group(&mut v_hub, if v_is_gcs { None } else { Some("g") });
@@ -686,24 +710,16 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
                     }
                 }
             },
-            Some(CONST_WS_MSG_ROUTING_SYSTEM) => match Ctx::from_hub(&v_hub, p_conn) {
-                Some(c) => {
-                    // the rare path: system commands read the whole message
-                    let Some(mut v_jmsg) = js_parse(&v_text) else { return };
-                    set_field_opt(&mut v_jmsg, "p", v_login.prm.clone());
-                    Route::System(Box::new((c, v_jmsg)))
-                }
-                None => Route::None,
+            Some(CONST_WS_MSG_ROUTING_SYSTEM) => match (Ctx::from_hub(&v_hub, p_conn), v_system) {
+                (Some(c), Some(v_jmsg)) => Route::System(Box::new((c, v_jmsg))),
+                _ => Route::None,
             },
             _ => Route::None,
         };
-        let v_group_ids = v_group.as_ref().and_then(|g| group_ids(&v_hub, g));
-        (v_route, v_msg, v_group_ids, v_plugin_account.map(|a| (a, v_frame_null_index)))
+        let v_needs_ids = v_mesh && matches!(v_route, Route::Forward);
+        let v_group_ids = if v_needs_ids { v_group.as_ref().and_then(|g| group_ids(&v_hub, g)) } else { None };
+        (v_route, v_group_ids)
     };
-    // after the hub is released: routing never waits on a plugin's queue
-    if let Some((v_account, v_null_index)) = v_plugin_frame {
-        p_server.plugins.dispatch(p_conn, v_account.as_ref(), &v_msg, v_null_index);
-    }
     match v_route {
         Route::None => {}
         Route::Forward => forward_message(p_server, &v_msg, p_binary, v_group),
@@ -716,7 +732,7 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
 
 /// (group m_ID, account m_accountID) of a group, for _gid/_aid.
 fn group_ids(p_hub: &Hub, p_group: &GroupRef) -> Option<(Value, Value)> {
-    let v_account = p_hub.accounts.get(&p_group.account_key)?;
-    let v_group = v_account.groups.get(&p_group.group_key).filter(|g| g.uid == p_group.uid)?;
+    let v_account = p_hub.accounts.get(&*p_group.account_key)?;
+    let v_group = v_account.groups.get(&*p_group.group_key).filter(|g| g.uid == p_group.uid)?;
     Some((v_group.id.clone(), v_account.id.clone()))
 }

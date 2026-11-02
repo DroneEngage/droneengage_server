@@ -5,8 +5,11 @@
 //! module-level maps (js_andruav_active_senders.js, the account rooms of
 //! js_andruav_chat_account_rooms.js, the waiting logins of
 //! js_andruav_comm_server.js). Here it all lives in one `Hub` behind a mutex
-//! that is never held across an await, so every message is routed as one
-//! atomic step, like on Node's single thread.
+//! that is never held across an await. A local message takes it twice, once to
+//! read what the sender may do and once to deliver; parsing and building the
+//! frame run in between, unlocked, so other sockets can act between the two.
+//! A socket's own messages stay in order because its read loop handles them
+//! one at a time.
 //!
 //! A `ConnHandle` is what other code keeps of a socket: its outbound queue,
 //! the number of bytes queued and not yet written (ws.bufferedAmount), its
@@ -238,8 +241,9 @@ pub struct Status {
 /// object when their uid matches.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupRef {
-    pub account_key: String,
-    pub group_key: String,
+    // shared text: routing copies a socket's ref for every message
+    pub account_key: Arc<str>,
+    pub group_key: Arc<str>,
     pub uid: u64,
 }
 
@@ -374,7 +378,7 @@ impl Hub {
     }
 
     pub fn group(&self, p_ref: &GroupRef) -> Option<&Group> {
-        self.accounts.get(&p_ref.account_key)?.groups.get(&p_ref.group_key).filter(|g| g.uid == p_ref.uid)
+        self.accounts.get(&*p_ref.account_key)?.groups.get(&*p_ref.group_key).filter(|g| g.uid == p_ref.uid)
     }
 
     /// `p_a.m__group === p_b.m__group` (both undefined counts as equal).
