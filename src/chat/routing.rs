@@ -193,7 +193,7 @@ enum Route {
 
 /// fn_parseMessage: a message from a local client socket.
 pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binary: bool) {
-    let (v_route, v_msg, v_group) = {
+    let (v_route, v_msg, v_group, v_plugin_frame) = {
         let mut v_hub = p_server.hub();
         // admin-blocked units stay connected but their traffic is dropped
         let v_blocked = match v_hub.client(p_conn) {
@@ -237,7 +237,7 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             Payload::text(v_text)
         };
 
-        p_server.plugins.dispatch(p_conn, v_login.account_id.as_ref(), &v_msg, v_frame_null_index);
+        let v_plugin_account = if p_server.plugins.is_empty() { None } else { Some(v_login.account_id.clone()) };
 
         let v_class = p_server.guard.message_class(v_jmsg.get(CONST_WS_MESSAGE_ID));
         let v_group = v_client.group.clone();
@@ -316,8 +316,12 @@ pub fn parse_message(p_server: &Arc<Server>, p_conn: u64, p_data: &[u8], p_binar
             _ => Route::None,
         };
         let v_group_ids = v_group.as_ref().and_then(|g| group_ids(&v_hub, g));
-        (v_route, v_msg, v_group_ids)
+        (v_route, v_msg, v_group_ids, v_plugin_account.map(|a| (a, v_frame_null_index)))
     };
+    // after the hub is released: routing never waits on a plugin's queue
+    if let Some((v_account, v_null_index)) = v_plugin_frame {
+        p_server.plugins.dispatch(p_conn, v_account.as_ref(), &v_msg, v_null_index);
+    }
     match v_route {
         Route::None => {}
         Route::Forward => forward_message(p_server, &v_msg, p_binary, v_group),

@@ -67,6 +67,8 @@ struct Queue {
     /// queue a Closed, which keeps closes bounded when a plugin is stuck
     open_conns: HashSet<u64>,
     busy: bool,
+    /// the worker is waiting: only then does a push pay for a wake-up
+    sleeping: bool,
     stopped: bool,
 }
 
@@ -98,8 +100,15 @@ impl PluginWorker {
             frame: p_frame.clone(),
             null_index: p_null_index,
         });
-        drop(v_queue);
-        self.m_wake.notify_one();
+        self.wake(v_queue);
+    }
+
+    fn wake(&self, mut p_queue: std::sync::MutexGuard<'_, Queue>) {
+        let v_sleeping = std::mem::take(&mut p_queue.sleeping);
+        drop(p_queue);
+        if v_sleeping {
+            self.m_wake.notify_one();
+        }
     }
 
     fn count_drop(&self, p_index: usize) {
@@ -117,8 +126,7 @@ impl PluginWorker {
         let mut v_queue = self.m_queue.lock().unwrap();
         if v_queue.open_conns.remove(&p_conn) {
             v_queue.jobs.push_back(Job::Closed(p_conn));
-            drop(v_queue);
-            self.m_wake.notify_one();
+            self.wake(v_queue);
         }
     }
 
@@ -139,6 +147,7 @@ impl PluginWorker {
             if v_queue.stopped {
                 return None;
             }
+            v_queue.sleeping = true;
             v_queue = self.m_wake.wait(v_queue).unwrap();
         }
     }
