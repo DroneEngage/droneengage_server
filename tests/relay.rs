@@ -88,3 +88,23 @@ async fn forward_external_appends_path_only_and_skips_the_source_child() {
     forward_external_message(&v_srv, &text(json!({ "ty": "g" })), false, Some(Source::Child(v_mesh.to_children.conn)));
     assert!(v_mesh.to_children.sent().is_empty());
 }
+
+#[tokio::test]
+async fn standalone_forwards_nothing_and_broadcast_still_delivers() {
+    // GL-0086: no mesh flags -> forward_* returns before any JSON work;
+    // local delivery is unaffected
+    let v_srv = server(json!({ "server_id": "SrvA" }));
+    let mut v_mesh = capture_mesh(&v_srv);
+    forward_message(&v_srv, &text(json!({ "ty": "g", "sd": "u1" })), false, Some((json!("g1"), json!("acc1"))));
+    forward_external_message(&v_srv, &text(json!({ "ty": "g", "sd": "u1" })), false, None);
+    assert!(v_mesh.to_children.sent().is_empty());
+    assert!(v_mesh.to_parent.try_recv().is_err());
+
+    // a drone's group broadcast still reaches the GCS on a standalone server
+    let v_gcs = connect(&v_srv, Party::new("g1", "g").account(json!("accA")).group(json!("g1")));
+    let v_drone = connect(&v_srv, Party::new("u1", "d").account(json!("accA")).group(json!("g1")));
+    let mut v_gcs = v_gcs;
+    send(&v_srv, &v_drone, json!({ "ty": "i", "sd": "u1", "mt": 2022, "ms": {"x": 1} }));
+    let v_got = v_gcs.wait_frames(1).await;
+    assert!(!v_got.is_empty(), "broadcast must still reach the GCS");
+}

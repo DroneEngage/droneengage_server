@@ -75,28 +75,41 @@ pub fn with_relay_metadata(p_msg: &Payload, p_origin: &str, p_group: Option<(Val
 }
 
 /// forwardMessage: a local client's message to the relay tree. p_group is
-/// the sender's (group id, account id) when it is in a group.
+/// the sender's (group id, account id) when it is in a group. With no mesh
+/// link the message goes nowhere — the flags are checked before the JSON
+/// round-trip so a standalone server pays nothing here.
 pub fn forward_message(p_server: &Arc<Server>, p_msg: &Payload, p_binary: bool, p_group: Option<(Value, Value)>) {
+    let v_super = p_server.cfg.is_true("enable_super_server");
+    let v_relay = p_server.cfg.is_true("enable_persistant_relay");
+    if !v_super && !v_relay {
+        return;
+    }
     let v_msg =
         with_relay_metadata(p_msg, &p_server.origin_id(), p_group, "Failed to parse message for relay metadata");
-    if p_server.cfg.is_true("enable_super_server") {
+    if v_super {
         p_server.parent.forward_message(&v_msg, p_binary, None);
     }
-    if p_server.cfg.is_true("enable_persistant_relay") {
+    if v_relay {
         p_server.child.forward_message(&v_msg, p_binary);
     }
 }
 
 /// forwardExternalMessage: a relayed broadcast propagates further in the
 /// tree (Child A -> Parent -> Child B/C + Grandparent), never back to its
-/// source child.
+/// source child. With no mesh link there is nothing to propagate to —
+/// checked before the JSON round-trip.
 pub fn forward_external_message(p_server: &Arc<Server>, p_msg: &Payload, p_binary: bool, p_source: Option<Source>) {
+    let v_super = p_server.cfg.is_true("enable_super_server");
+    let v_relay = p_server.cfg.is_true("enable_persistant_relay");
+    if !v_super && !v_relay {
+        return;
+    }
     let v_msg =
         with_relay_metadata(p_msg, &p_server.origin_id(), None, "Failed to parse external message for path tracking");
-    if p_server.cfg.is_true("enable_persistant_relay") {
+    if v_relay {
         p_server.child.forward_message(&v_msg, p_binary);
     }
-    if p_server.cfg.is_true("enable_super_server") {
+    if v_super {
         let v_exclude = match p_source {
             Some(Source::Child(id)) => Some(id),
             _ => None,
