@@ -33,7 +33,6 @@ Core components:
 - `src/s2s/parent.rs`, `src/s2s/child.rs` - Parent and child server S2S
 - `src/s2s/s2s_auth.rs` - Ed25519/HMAC S2S authentication
 - `src/s2s/auth_client.rs`, `src/s2s/db_proxy_client.rs`, `src/s2s/udp_relay_client.rs` - AUTH, storage and UDP relay links
-- `src/udp_proxy.rs` - Built-in UDP proxy
 - `src/chat/tasks.rs`, `src/chat/news.rs` - Tasks and news
 - `src/constants.rs` - Message types, routing constants
 - `src/util.rs` - JavaScript-compatible JSON and value helpers

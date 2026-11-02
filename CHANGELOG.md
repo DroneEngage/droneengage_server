@@ -4,6 +4,11 @@ Major changes to the DroneEngage main signaling (communication) server, newest f
 
 ## [Unreleased]
 
+- **Built-in UDP proxy removed.** `droneengage_udp_proxy` is the only UDP proxy.
+  With `udp_relay` empty the server warns at startup and drones get `en:false`.
+  `udp_relay_fallback` and `allow_udpproxy_fixed_port` are gone; the relay's
+  `allow_fixed_port` replaces the latter. The shipped `server.config` points
+  `udp_relay` at the local relay.
 - **Rust port.** The server is rewritten in Rust (`cargo build --release`,
   binary `andruavmainserver`) and replaces the Node.js code in place. The
   configuration files, command line, wire protocol and console output are
