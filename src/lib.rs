@@ -14,7 +14,6 @@ pub mod constants;
 pub mod hub;
 pub mod s2s;
 pub mod server;
-pub mod udp_proxy;
 
 // shared with the other DroneEngage servers
 pub use droneengage_server_common::{colors, logger, net, util};
@@ -70,12 +69,8 @@ pub async fn start(p_server: &Arc<Server>) -> Result<Started, String> {
     }
     let v_chat = chat::connection::start_chat_server(p_server).await?;
 
-    // the kernel UDP buffer limits only matter while this process hosts the
-    // built-in proxy: always without udp_relay, or as udp_relay_fallback builtin
-    let v_relay_only = p_server.relay.is_enabled()
-        && p_server.cfg.get("udp_relay_fallback").and_then(|v| v.as_str()) != Some("builtin");
-    if !v_relay_only {
-        udp_proxy::check_and_fix_kernel_buffers();
+    for v_warning in s2s::udp_relay_client::UdpRelayClient::config_warnings(&p_server.cfg) {
+        println!("[WARN] {}", v_warning);
     }
 
     let v_parent = if p_server.cfg.is_true("enable_super_server") {

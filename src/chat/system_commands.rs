@@ -2,60 +2,13 @@
 //! proxy (9008) and its GCS-side pin (9021), ping, logout, and the task /
 //! mission / query / news commands.
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::chat::{dump_error, news, query_server, tasks, Ctx};
 use crate::constants::*;
 use crate::server::Server;
-use crate::util::{field, is_true, js_interp, js_truthy, now_ms, set_field};
-
-/// Today's built-in UDP proxy handling of a 9008 request (js_udp_proxy.js),
-/// used without udp_relay and as the relay's `udp_relay_fallback: builtin`.
-pub async fn handle_builtin_udp_proxy(p_server: &Arc<Server>, p_ctx: &Ctx, mut p_jmsg: Value) {
-    let Some(v_ms) = p_jmsg.get("ms").filter(|m| !m.is_null()).cloned() else {
-        dump_error("TypeError: Cannot read properties of undefined (reading 'en')");
-        return;
-    };
-    let v_account = p_ctx.account_id();
-    let v_name = p_ctx.name_now(p_server);
-    let fn_reply = |p_jmsg: &mut Value, p_ms: Map<String, Value>| {
-        set_field(p_jmsg, "ms", Value::Object(p_ms));
-        set_field(p_jmsg, "ty", json!(CONST_WS_MSG_ROUTING_INDIVIDUAL));
-        crate::util::set_field_opt(p_jmsg, "tg", v_name.clone());
-        set_field(p_jmsg, "sd", json!(CONST_WS_SENDER_COMM_SERVER));
-        p_ctx.handle.send_json(p_jmsg);
-    };
-    if is_true(field(&v_ms, "en")) {
-        let (Some(v_s1), Some(v_s2)) =
-            (field(&v_ms, "socket1").filter(|s| !s.is_null()), field(&v_ms, "socket2").filter(|s| !s.is_null()))
-        else {
-            dump_error("TypeError: Cannot read properties of undefined (reading 'port')");
-            return;
-        };
-        let (mut v_s1, mut v_s2) = (v_s1.clone(), v_s2.clone());
-        if !p_server.cfg.is_true("allow_udpproxy_fixed_port") {
-            // the unit cannot choose its ports
-            if !v_s1.is_object() || !v_s2.is_object() {
-                dump_error("TypeError: Cannot create property 'port' on primitive");
-                return;
-            }
-            set_field(&mut v_s1, "port", json!(0));
-            set_field(&mut v_s2, "port", json!(0));
-        }
-        // pairs are per account: same-named units in two accounts must not share one
-        let v_reply = p_server.udp.get_udp_socket(p_server, v_name.as_ref(), &v_s1, &v_s2, v_account.as_ref()).await;
-        if v_reply.get("en") == Some(&Value::Bool(false)) {
-            let v_closed = p_server.udp.close_udp_socket(p_server, v_name.as_ref(), v_account.as_ref()).await;
-            fn_reply(&mut p_jmsg, v_closed);
-        } else {
-            fn_reply(&mut p_jmsg, v_reply);
-        }
-    } else if field(&v_ms, "en") == Some(&Value::Bool(false)) {
-        let v_closed = p_server.udp.close_udp_socket(p_server, v_name.as_ref(), v_account.as_ref()).await;
-        fn_reply(&mut p_jmsg, v_closed);
-    }
-}
+use crate::util::{field, js_interp, js_truthy, now_ms, set_field};
 
 /// onSystemMessage
 pub fn on_system_message(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg: Value) {
@@ -96,8 +49,11 @@ pub fn on_system_message(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg: Value) 
                     crate::s2s::udp_relay_client::handle_unit_request(&v_server, p_ctx, p_jmsg).await;
                 });
             } else {
+                // no relay configured: this server offers no UDP proxy
                 let v_server = p_server.clone();
-                tokio::spawn(async move { handle_builtin_udp_proxy(&v_server, &p_ctx, p_jmsg).await });
+                tokio::spawn(async move {
+                    crate::s2s::udp_relay_client::reply_disabled(&v_server, &p_ctx, p_jmsg);
+                });
             }
         }
         CONST_TYPE_ANDRUAV_SYSTEM_UDP_PROXY_PEER => {

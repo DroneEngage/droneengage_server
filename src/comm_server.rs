@@ -99,13 +99,13 @@ fn request_id(p_cmd: &Value) -> Option<Value> {
     }
 }
 
-/// Built-in proxies plus the relay pairs this comm server owns.
+/// The relay pairs this comm server owns.
 pub async fn all_udp_proxies(p_server: &Arc<Server>) -> Vec<Value> {
-    let mut v_rows = p_server.udp.active_proxies_list(p_server).await;
     if p_server.relay.is_enabled() {
-        v_rows.extend(p_server.relay.relay_proxies_list(p_server).await);
+        p_server.relay.relay_proxies_list(p_server).await
+    } else {
+        Vec::new()
     }
-    v_rows
 }
 
 /// `e`: replies `f` with the open UDP proxies.
@@ -119,8 +119,8 @@ pub async fn handle_query_udp_proxies(p_server: &Arc<Server>, p_cmd: &Value) {
     p_server.auth.send_message(js_stringify(&v_reply));
 }
 
-/// `g` {name, blocked, account?}: blocks/resumes forwarding on a named
-/// proxy (and the relay pairs of that unit); replies `f`.
+/// `g` {name, blocked, account?}: blocks/resumes forwarding on the relay
+/// pairs of a named unit; replies `f`.
 pub async fn handle_set_udp_proxy_state(p_server: &Arc<Server>, p_cmd: &Value) {
     let v_d = p_cmd.get("d").filter(|d| crate::util::js_truthy(Some(d)));
     let v_name = v_d.and_then(|d| crate::util::field(d, "name")).cloned();
@@ -129,11 +129,8 @@ pub async fn handle_set_udp_proxy_state(p_server: &Arc<Server>, p_cmd: &Value) {
     let v_account = v_d.and_then(|d| crate::util::field(d, "account")).cloned();
     let mut v_applied = false;
     if let Some(Value::String(v_n)) = &v_name {
-        v_applied = p_server.udp.set_proxy_blocked(v_n, v_blocked, v_account.as_ref()).await;
         if p_server.relay.is_enabled() {
-            let v_relay_applied =
-                p_server.relay.set_relay_proxy_blocked(p_server, v_n, v_blocked, v_account.as_ref()).await;
-            v_applied = v_applied || v_relay_applied;
+            v_applied = p_server.relay.set_relay_proxy_blocked(p_server, v_n, v_blocked, v_account.as_ref()).await;
         }
     }
     if !v_applied {

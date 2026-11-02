@@ -177,22 +177,19 @@ SSL is independent of S2S certificate authentication - similar to the AUTH <--> 
 
 ### UDP Relay Server
 
-By default, the comm server hosts the UDP proxy itself (`src/udp_proxy.rs`).
-This is the 9008 port pair that relays MAVLink between a drone's de_mavlink
-and a third-party GCS such as QGroundControl or Mission Planner.
-
-When `udp_relay` lists one or more standalone relay servers
-(`droneengage_udp_relay_server`; design in
-[wiki/UdpRelayServer.md](wiki/UdpRelayServer.md)), the comm server becomes a
-broker. It asks a relay for the pair and replies to the unit with the relay's
-sockets in the same 9008 shape. Without `udp_relay`, nothing changes.
+The UDP proxy is the 9008 port pair that relays MAVLink between a drone's
+de_mavlink and a third-party GCS such as QGroundControl or Mission Planner. It
+runs only in the standalone server (`droneengage_udp_proxy`; design in
+[wiki/UdpRelayServer.md](wiki/UdpRelayServer.md)), which is part of every server
+installation. The comm server is a broker: it asks a relay for the pair and
+replies to the unit with the relay's sockets in the 9008 shape. With `udp_relay`
+empty, the server warns at startup and drones get `en:false`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `udp_relay` | `[]` | relays as `[{ "host", "port", "id" }]`; absent or `[]` = built-in proxy |
+| `udp_relay` | shipped: the local relay | relays as `[{ "host", "port", "id" }]`; absent or `[]` = no UDP proxy |
 | `udp_relay_select` | `"hash"` | which relay a unit goes to: `hash` (stable per account/unit), `first_healthy` (list order) or `least_loaded` (fewest pairs) |
-| `udp_relay_fallback` | `"none"` | when no relay is reachable: `none` = the unit gets `en:false`, then an unsolicited `en:true` once a relay is back; `builtin` = serve it from the built-in proxy |
-| `udp_relay_pending_s` | `30` | how long a request is held while relays reconnect, before the fallback applies |
+| `udp_relay_pending_s` | `30` | how long a request is held while relays reconnect; then the unit gets `en:false`, and an unsolicited `en:true` once a relay is back |
 | `udp_relay_failover_s` | `120` | a relay down this long has its units moved to another relay; match the relays' `owner_grace_s` |
 | `trust_proxy_header` | `false` | `true` only behind a reverse proxy: a party's IP (fed to the relay's GCS allowlist) is then the first `X-Forwarded-For` entry |
 
@@ -217,13 +214,10 @@ What the broker does:
   account+group (their IPs are sent to the relay). A GCS manages the pin with
   system message **9021** (`UdpProxyPeer`) `{tg_unit, act: allow|reset|query}`.
   `allow` and `reset` need `PERMISSION_ALLOW_GCS_FULL_CONTROL`.
-- **AUTH dashboard:** `e` lists relay pairs next to built-in ones, with
+- **AUTH dashboard:** `e` lists relay pairs, with
   `account`, `owner` and `relay_id`. `g` blocks on the relay. A new `j`
   `UDP_RELAY_STATUS` reports each relay link on connect, on change and
   every 30 s.
-
-The kernel UDP buffer check runs only while this process can host the
-built-in proxy: with no `udp_relay`, or with `udp_relay_fallback: builtin`.
 
 ## Running the Server
 
@@ -292,7 +286,7 @@ cargo test --test relay
 Tests are in `tests/`. CI also runs `cargo fmt --check` and
 `cargo clippy --all-targets -- -D warnings`. `tests/udp_relay.rs` runs
 against a real relay binary when `DE_UDP_RELAY_BIN` points to one (or a
-sibling `prv_droneengage_udp_proxy` checkout has been built) and is skipped
+sibling `droneengage_udp_proxy` checkout has been built) and is skipped
 otherwise.
 
 ## Plugins
@@ -395,7 +389,6 @@ droneengage_server/
 │   ├── server.rs              # Shared server state
 │   ├── hub.rs                 # Connections, accounts, groups
 │   ├── comm_server.rs         # AUTH-driven commands (logins, blocking)
-│   ├── udp_proxy.rs           # Built-in UDP proxy
 │   ├── chat/                  # WebSocket server, routing, tasks, news, plugins
 │   └── s2s/                   # AUTH, storage, relay and parent/child links
 ├── tests/                     # Integration tests

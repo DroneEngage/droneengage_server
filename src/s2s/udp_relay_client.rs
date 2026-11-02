@@ -5,9 +5,8 @@
 //! today's 9008 shape.
 //!
 //! Config (server.config):
-//!   udp_relay            : [{host, port, id, ssl?}]  absent or [] -> built-in proxy
+//!   udp_relay            : [{host, port, id, ssl?}]  absent or [] -> no UDP proxy (9008 gets en:false)
 //!   udp_relay_select     : "hash" (default) | "first_healthy" | "least_loaded"
-//!   udp_relay_fallback   : "none" | "builtin"  when no relay is reachable (default none)
 //!   udp_relay_pending_s  : hold an open request this long while relays reconnect (default 30)
 //!   udp_relay_failover_s : a relay down this long has its units moved (default 120)
 //!
@@ -62,8 +61,6 @@ enum UnitState {
     Relay,
     /// waiting for a relay to come up
     Pending,
-    /// served by the built-in proxy (fallback builtin)
-    Builtin,
 }
 
 impl UnitState {
@@ -71,7 +68,6 @@ impl UnitState {
         match self {
             UnitState::Relay => "relay",
             UnitState::Pending => "pending",
-            UnitState::Builtin => "builtin",
         }
     }
 }
@@ -444,8 +440,16 @@ impl UdpRelayClient {
         self.relays().iter().any(|r| r.is_connected())
     }
 
-    fn fallback_builtin(p_server: &Server) -> bool {
-        p_server.cfg.get("udp_relay_fallback").and_then(Value::as_str) == Some("builtin")
+    /// What is worth telling the operator about the UDP proxy settings at startup.
+    pub fn config_warnings(p_cfg: &Config) -> Vec<&'static str> {
+        let mut v_out = Vec::new();
+        if !matches!(p_cfg.get("udp_relay"), Some(Value::Array(a)) if !a.is_empty()) {
+            v_out.push("UDP proxy is off: udp_relay is empty, so drones get en:false");
+        }
+        if p_cfg.get("udp_relay_fallback").and_then(Value::as_str) == Some("builtin") {
+            v_out.push("udp_relay_fallback is ignored: the built-in UDP proxy was removed");
+        }
+        v_out
     }
 
     fn seconds(p_server: &Server, p_key: &str, p_default: f64) -> Duration {
@@ -507,10 +511,9 @@ impl UdpRelayClient {
             })));
         }
         log(&format!(
-            "{} relay(s), select {}, fallback {}, pending {}s, failover {}s",
+            "{} relay(s), select {}, pending {}s, failover {}s",
             v_me.relays().len(),
             Self::select_mode(p_server),
-            if Self::fallback_builtin(p_server) { "builtin" } else { "none" },
             crate::util::js_number_fmt(
                 Self::seconds(p_server, "udp_relay_pending_s", DEFAULT_PENDING_S).as_millis() as f64 / 1000.0
             ),
@@ -692,6 +695,11 @@ pub fn disabled_payload() -> Value {
     json!({ "en": false, "socket1": zero_socket(), "socket2": zero_socket() })
 }
 
+/// 9008 from a drone when no relay is configured.
+pub fn reply_disabled(p_server: &Server, p_ctx: &Ctx, mut p_jmsg: Value) {
+    reply_to_unit(p_server, p_ctx, &mut p_jmsg, disabled_payload());
+}
+
 /// A 9008 reply on the unit's socket, reusing the request object.
 fn reply_to_unit(p_server: &Server, p_ctx: &Ctx, p_jmsg: &mut Value, p_ms: Value) {
     crate::util::set_field(p_jmsg, "ms", p_ms);
@@ -848,10 +856,6 @@ pub async fn handle_unit_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg:
         if let Some(t) = v_old.as_ref().and_then(|o| o.timer.as_ref()) {
             t.abort();
         }
-        if v_old.as_ref().map(|o| o.state == UnitState::Builtin).unwrap_or(false) {
-            crate::chat::system_commands::handle_builtin_udp_proxy(p_server, &p_ctx, p_jmsg).await;
-            return;
-        }
         if let Some(v_relay) = v_old.and_then(|o| o.relay).filter(|r| r.is_connected()) {
             let v_close = json!({ "account": v_account, "unit": v_unit });
             if let Err(e) = v_relay.request("close", v_close).await {
@@ -923,8 +927,7 @@ pub async fn handle_unit_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg:
 
 /// fn_holdRequest: no relay reachable — hold the request for
 /// udp_relay_pending_s; answered when a relay authenticates in time, else
-/// fallback none -> en:false now (en:true pushed later), builtin -> the
-/// built-in proxy.
+/// en:false now (en:true pushed later).
 fn hold_request(p_server: &Arc<Server>, p_key: &str, p_serial: u64, p_ctx: Ctx, p_jmsg: Value) {
     let v_server = p_server.clone();
     let v_key = p_key.to_string();
@@ -938,15 +941,6 @@ fn hold_request(p_server: &Arc<Server>, p_key: &str, p_serial: u64, p_ctx: Ctx, 
         .flatten();
         let Some((v_ctx, mut v_jmsg)) = v_waiting else { return };
         let v_unit = js_key(v_ctx.name.as_ref());
-        if UdpRelayClient::fallback_builtin(&v_server) {
-            log(&format!("no relay available for '{}', falling back to the built-in proxy", v_unit));
-            with_entry(&v_server, &v_key, p_serial, |e| {
-                e.state = UnitState::Builtin;
-                e.relay = None;
-            });
-            crate::chat::system_commands::handle_builtin_udp_proxy(&v_server, &v_ctx, v_jmsg).await;
-            return;
-        }
         log(&format!(
             "no relay available for '{}', replying en:false (will push en:true when a relay is back)",
             v_unit
@@ -1321,7 +1315,7 @@ pub async fn handle_gcs_peer_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_j
         st.units.get(&unit_key(v_account.as_ref(), Some(&json!(v_tg)))).map(|e| (e.state, e.relay.clone()))
     };
     let v_relay = match v_entry {
-        Some((s, r)) if p_server.relay.is_enabled() && s != UnitState::Builtin => r,
+        Some((_, r)) if p_server.relay.is_enabled() => r,
         _ => {
             fn_reply(&mut p_jmsg, json!({ "pinned": { "gcs": { "mode": "open" } } }));
             return;

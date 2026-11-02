@@ -8,7 +8,7 @@
 mod common;
 
 use andruavserver::s2s::udp_relay_client::{
-    select_relay_id, unit_payload, SELECT_FIRST_HEALTHY, SELECT_HASH, SELECT_LEAST_LOADED,
+    select_relay_id, unit_payload, UdpRelayClient, SELECT_FIRST_HEALTHY, SELECT_HASH, SELECT_LEAST_LOADED,
 };
 use common::*;
 use serde_json::{json, Value};
@@ -230,7 +230,7 @@ fn start_relay(p_bin: &PathBuf, p_port: u16, p_public_host: &str) -> Relay {
 
 fn relay_server(p_relay_port: u16, p_extra: Value) -> Arc<andruavserver::Server> {
     let mut v_cfg = json!({
-        "server_id": "DE_CommSrv_Test", "public_host": "comm.test.local", "allow_udpproxy_fixed_port": false,
+        "server_id": "DE_CommSrv_Test", "public_host": "comm.test.local",
         "ignore_auth_server": true,
         "udp_relay": [{ "host": "127.0.0.1", "port": p_relay_port, "id": "R1", "ssl": false }],
         "udp_relay_pending_s": 1
@@ -281,7 +281,7 @@ async fn relay_hosts_the_pair_with_gcs_ips_token_and_9021() {
     let v_bin = need_relay!();
     let v_relay = start_relay(&v_bin, free_port(), "relay.test.local");
     let v_srv = relay_server(v_relay.port, json!({}));
-    andruavserver::s2s::udp_relay_client::UdpRelayClient::start(&v_srv);
+    UdpRelayClient::start(&v_srv);
     assert!(wait_until(|| v_srv.relay.is_connected(), 5000).await, "relay link up");
 
     let mut v_gcs = connect(&v_srv, Party::new("gcs_a", "g").prm(json!(3840)).ip("10.1.1.1"));
@@ -339,7 +339,7 @@ async fn relay_down_fallback_none_then_en_true_when_it_is_back() {
     let v_bin = need_relay!();
     let v_port = free_port();
     let v_srv = relay_server(v_port, json!({}));
-    andruavserver::s2s::udp_relay_client::UdpRelayClient::start(&v_srv);
+    UdpRelayClient::start(&v_srv);
     let mut v_unit = connect(&v_srv, Party::new("u2", "d"));
     request_9008(&v_srv, &v_unit, json!({}));
     // held for udp_relay_pending_s, then en:false
@@ -362,22 +362,40 @@ async fn relay_down_fallback_none_then_en_true_when_it_is_back() {
 }
 
 #[tokio::test]
-async fn relay_down_fallback_builtin_serves_the_unit_locally() {
-    let v_srv = relay_server(free_port(), json!({ "udp_relay_fallback": "builtin" }));
-    andruavserver::s2s::udp_relay_client::UdpRelayClient::start(&v_srv);
+async fn relay_down_fallback_builtin_is_ignored_and_en_true_when_it_is_back() {
+    let v_bin = need_relay!();
+    let v_port = free_port();
+    let v_srv = relay_server(v_port, json!({ "udp_relay_fallback": "builtin" }));
+    let v_warnings = UdpRelayClient::config_warnings(&v_srv.cfg);
+    assert!(v_warnings.iter().any(|w| w.contains("udp_relay_fallback is ignored")), "{:?}", v_warnings);
+    UdpRelayClient::start(&v_srv);
     let mut v_unit = connect(&v_srv, Party::new("u3", "d"));
     request_9008(&v_srv, &v_unit, json!({}));
+    assert_eq!(next_ms(&mut v_unit, 9008).await["en"], false);
+    let _v_relay = start_relay(&v_bin, v_port, "relay.back.local");
+    let mut v_pushed = Value::Null;
+    for _ in 0..20 {
+        let v_frames = v_unit.wait_frames(1).await;
+        if let Some(f) = v_frames.into_iter().find(|f| f.json()["mt"] == 9008) {
+            v_pushed = f.json().clone();
+            break;
+        }
+    }
+    assert_eq!(v_pushed["ms"]["en"], true, "{}", v_pushed);
+    assert_eq!(v_pushed["ms"]["socket1"]["address"], "relay.back.local");
+}
+
+#[tokio::test]
+async fn no_relay_configured_means_en_false_and_no_proxies() {
+    let v_srv = server(json!({ "public_host": "comm.test.local" }));
+    let v_warnings = UdpRelayClient::config_warnings(&v_srv.cfg);
+    assert!(v_warnings.iter().any(|w| w.contains("UDP proxy is off")), "{:?}", v_warnings);
+    let mut v_unit = connect(&v_srv, Party::new("u4", "d"));
+    request_9008(&v_srv, &v_unit, json!({}));
     let v_ms = next_ms(&mut v_unit, 9008).await;
-    assert_eq!(v_ms["en"], true);
-    assert_eq!(v_ms["socket1"]["address"], "comm.test.local", "the comm server's own proxy");
-    // 9021 for a unit on the built-in proxy: mode open
-    let mut v_gcs = connect(&v_srv, Party::new("gcs", "g").prm(json!(3840)));
-    assert_eq!(
-        peer(&v_srv, &mut v_gcs, "u3", "query").await,
-        json!({ "tg_unit": "u3", "pinned": { "gcs": { "mode": "open" } } })
-    );
-    // en:false goes to the built-in proxy too
+    assert_eq!(v_ms["en"], false);
+    assert_eq!(v_ms["socket1"]["port"], 0);
     send(&v_srv, &v_unit, json!({ "ty": "s", "mt": 9008, "ms": { "en": false } }));
     assert_eq!(next_ms(&mut v_unit, 9008).await["en"], false);
-    assert_eq!(v_srv.udp.pair_count().await, 0);
+    assert!(andruavserver::comm_server::all_udp_proxies(&v_srv).await.is_empty());
 }

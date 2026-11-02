@@ -26,7 +26,7 @@ use crate::colors as c;
 use crate::constants::*;
 use crate::hub::{Client, ConnHandle, Login, Out, Status};
 use crate::server::Server;
-use crate::util::{js_key, js_nullish, js_parse_bytes, js_stringify, now_ms};
+use crate::util::{js_key, js_parse_bytes, js_stringify, now_ms};
 use crate::validation::is_alphanumeric;
 
 /// A party has this long to send its de_auth frame.
@@ -267,14 +267,6 @@ pub fn on_close(p_server: &Arc<Server>, p_conn: u64) {
     let v_unit_name = v_client.name.clone();
     let v_login = v_client.login.clone();
     p_server.hub().del_member_from_account_by_name(v_login.as_ref(), true);
-    // close a UDP proxy owned by this unit so it is not left orphaned
-    if !js_nullish(v_unit_name.as_ref()) {
-        let v_account = v_login.as_ref().and_then(|l| l.account_id.clone());
-        let (v_server, v_name) = (p_server.clone(), v_unit_name.clone());
-        tokio::spawn(async move {
-            v_server.udp.close_udp_socket(&v_server, v_name.as_ref(), v_account.as_ref()).await;
-        });
-    }
     // a relay-hosted pair is not closed: the relay idles it out, so a quick
     // reconnect keeps its ports
     if p_server.relay.is_enabled() {

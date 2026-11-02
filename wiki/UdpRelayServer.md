@@ -5,6 +5,12 @@ Status: **implemented** in `droneengage_udp_relay_server` (TASK-50, 51, 53,
 webclient, authenticator and simulator parts follow in their own tasks. Where
 the implementation differs from this design, a note in that section says so.
 
+**Update, 2026-11-02 (GL-0093):** the built-in proxy has been removed from the
+comm server. `droneengage_udp_proxy` is the only UDP proxy, and it is part of
+every server installation. An empty `udp_relay` now means no UDP proxy, and
+`udp_relay_fallback` is gone. Anything below about keeping or falling back to
+the built-in proxy is history.
+
 Proposal: move the UDP proxy out of `droneengage_server` into its own
 process, the **UDP relay server**, the same way mission and task
 persistence moved out into `droneengage_storage_server`. The comm server

@@ -17,7 +17,6 @@ use crate::s2s::db_proxy_client::DbProxyClient;
 use crate::s2s::parent::ParentServer;
 use crate::s2s::s2s_auth::S2sAuth;
 use crate::s2s::udp_relay_client::UdpRelayClient;
-use crate::udp_proxy::UdpProxy;
 use crate::util::js_stringify;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -51,7 +50,6 @@ pub struct Server {
     pub s2s: S2sAuth,
     pub auth: AuthClient,
     pub db: DbProxyClient,
-    pub udp: UdpProxy,
     pub relay: UdpRelayClient,
     pub parent: ParentServer,
     pub child: ChildLink,
@@ -70,7 +68,6 @@ impl Server {
             s2s: S2sAuth::new(&p_cfg, p_env.s2s_shared_secret.clone()),
             auth: AuthClient::new(),
             db: DbProxyClient::new(),
-            udp: UdpProxy::new(),
             relay: UdpRelayClient::new(&p_cfg),
             parent: ParentServer::new(),
             child: ChildLink::new(),
