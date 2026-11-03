@@ -131,6 +131,8 @@ cargo test --test relay
 - README.md - User-facing documentation
 - wiki/MessagePropagation.md - Message routing and relay architecture
 - wiki/S2SAuthentication.md - Server-to-server authentication setup
+- wiki/PerformanceComparison.md - Node.js vs Rust architecture and benchmark measurements
+
 
 ## Version
 3.9.11

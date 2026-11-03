@@ -9,3 +9,8 @@ Here is a numerical comparison of **C, Rust, Node.js, and Python**.
 | **Startup Time** | **< 1 ms** (Instant) | **< 5 ms** (Instant) | **~50 – 100 ms** | **~20 – 50 ms** |
 | **Garbage Collector (GC)** | No (Manual memory) | No (Ownership/Borrow checker) | Yes (V8 GC pauses) | Yes (Reference counting + GC) |
 | **Concurrency Model** | Manual / OS Threads | Fearless Concurrency / Async (Tokio) | Event Loop (Single-threaded I/O) | GIL (Global Interpreter Lock) / Async |
+
+---
+
+For real measured benchmark data, architectural differences, and percentage improvements between the original Node.js communication server and the optimized Rust implementation (Plan GL-0076), see [PerformanceComparison.md](PerformanceComparison.md).
+

@@ -374,6 +374,8 @@ Example configuration files are provided in the `deployment/` directory:
 
 - [Message Propagation](wiki/MessagePropagation.md) - Message routing and relay architecture
 - [S2S Authentication](wiki/S2SAuthentication.md) - Server-to-server authentication setup
+- [Performance Comparison](wiki/PerformanceComparison.md) - Node.js vs Rust architecture and benchmark measurements
+
 
 ## Project Structure
 
