@@ -734,6 +734,35 @@ fn push_to_unit(p_server: &Server, p_account: Option<&Value>, p_unit: Option<&Va
     true
 }
 
+/// An unsolicited 9021 to the same-account+group GCS connections holding
+/// full control (the 9021 permission rule). @returns recipients.
+fn push_to_gcs(p_server: &Server, p_account: Option<&Value>, p_group: Option<&Value>, p_ms: Value) -> usize {
+    let v_hub = p_server.hub();
+    let v_full = CONST_PERMISSION_ALLOW_GCS_FULL_CONTROL;
+    let v_account_key = js_key(p_account);
+    let v_group_key = js_key(p_group);
+    let mut v_n = 0;
+    for v_c in v_hub.clients.values() {
+        let Some(v_login) = &v_c.login else { continue };
+        if !v_login.actor_is(CONST_ACTOR_TYPE_GCS)
+            || v_login.account_key() != v_account_key
+            || js_key(v_login.group_id.as_ref()) != v_group_key
+            || js_and(js_number(v_login.prm.as_ref()), v_full) != v_full
+            || !v_c.handle.is_open()
+        {
+            continue;
+        }
+        let mut v_msg = Map::new();
+        v_msg.insert(CONST_WS_MESSAGE_ID.into(), json!(CONST_TYPE_ANDRUAV_SYSTEM_UDP_PROXY_PEER));
+        v_msg.insert(CONST_WS_MSG_ROUTING.into(), json!(CONST_WS_MSG_ROUTING_INDIVIDUAL));
+        v_msg.insert(CONST_WS_SENDER_ID.into(), json!(CONST_WS_SENDER_COMM_SERVER));
+        v_msg.insert(CONST_WS_PAYLOAD.into(), p_ms.clone());
+        v_c.handle.send_json(&Value::Object(v_msg));
+        v_n += 1;
+    }
+    v_n
+}
+
 /// IPs of the GCS sockets in the same account+group as the unit's socket.
 fn gcs_ips_of_group(p_server: &Server, p_account: Option<&Value>, p_unit: Option<&Value>) -> Vec<String> {
     let v_hub = p_server.hub();
@@ -1161,10 +1190,12 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
     let v_key = unit_key(v_account.as_ref(), v_unit.as_ref());
     let v_entry = {
         let st = p_server.relay.m_st.lock().unwrap();
-        st.units.get(&v_key).filter(|e| same_relay(&e.relay, p_relay)).map(|e| (e.serial, e.state, e.opening))
+        st.units.get(&v_key).filter(|e| same_relay(&e.relay, p_relay)).map(|e| {
+            (e.serial, e.state, e.opening, e.group.clone())
+        })
     };
     // a unit that moved to another relay ignores its old relay's pushes
-    let Some((v_serial, v_state, v_opening)) = v_entry else { return };
+    let Some((v_serial, v_state, v_opening, v_group)) = v_entry else { return };
     match p_msg.get("mt").and_then(Value::as_str) {
         Some("closed") => {
             // only pairs a unit still wants
@@ -1196,6 +1227,21 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
                 v_open.insert("socket2".into(), s.clone());
             }
             push_to_unit(p_server, v_account.as_ref(), v_unit.as_ref(), unit_payload(&Value::Object(v_open)));
+        }
+        // GL-0109: a stranger knocking, or the lock moving — the group's
+        // full-control GCSs learn of it as a 9021 system message
+        Some(v_mt @ ("gcs_attempt" | "gcs_switched")) => {
+            let mut v_out = Map::new();
+            if let Some(u) = v_unit.as_ref() {
+                v_out.insert("tg_unit".into(), u.clone());
+            }
+            v_out.insert("act".into(), json!(if v_mt == "gcs_attempt" { "attempt" } else { "switched" }));
+            for k in ["from_ip", "from_port", "others", "until_ms", "reason"] {
+                if let Some(v) = v_ms.get(k) {
+                    v_out.insert(k.into(), v.clone());
+                }
+            }
+            push_to_gcs(p_server, v_account.as_ref(), v_group.as_ref(), Value::Object(v_out));
         }
         _ => {}
     }
@@ -1348,7 +1394,27 @@ pub async fn handle_gcs_peer_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_j
     }
     .await;
     match v_result {
-        Ok(v_ms) => fn_reply(&mut p_jmsg, v_ms),
+        Ok(v_ms) => {
+            // the requester's reply goes first, then the group's other
+            // GCSs get the fresh state — an answered request clears
+            // everywhere
+            if v_ms.get("applied") == Some(&Value::Bool(true)) {
+                let v_pinned = v_ms.get("pinned").cloned().unwrap_or(Value::Null);
+                fn_reply(&mut p_jmsg, v_ms);
+                let mut v_out = Map::new();
+                v_out.insert("tg_unit".into(), json!(v_tg));
+                v_out.insert("act".into(), json!("state"));
+                v_out.insert("pinned".into(), v_pinned);
+                push_to_gcs(
+                    p_server,
+                    v_unit_login.account_id.as_ref(),
+                    v_unit_login.group_id.as_ref(),
+                    Value::Object(v_out),
+                );
+            } else {
+                fn_reply(&mut p_jmsg, v_ms);
+            }
+        }
         Err(e) => {
             log(&format!("9021 {} for '{}' failed: {}", v_act, v_tg, e));
             fn_reply(&mut p_jmsg, json!({ "error": "relay_unavailable" }));

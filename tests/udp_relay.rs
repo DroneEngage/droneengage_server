@@ -196,13 +196,17 @@ impl Drop for Relay {
 }
 
 fn start_relay(p_bin: &PathBuf, p_port: u16, p_public_host: &str) -> Relay {
+    start_relay_policy(p_bin, p_port, p_public_host, "allowlist_then_tofu")
+}
+
+fn start_relay_policy(p_bin: &PathBuf, p_port: u16, p_public_host: &str, p_policy: &str) -> Relay {
     let v_dir = tempfile::tempdir().unwrap();
     let v_lo = 47000 + (p_port % 100) * 20;
     let v_cfg = json!({
         "server_id": "R", "server_ip": "127.0.0.1", "server_port": p_port, "enable_SSL": false,
         "s2s_cert_enabled": false, "udp_bind_ip": "0.0.0.0", "public_host": p_public_host,
         "udp_port_range": [v_lo, v_lo + 19], "allow_fixed_port": true, "udp_buffer_bytes": 0,
-        "gcs_peer_policy": "allowlist_then_tofu", "idle_timeout_s": 300, "reaper_interval_s": 60, "owner_grace_s": 120
+        "gcs_peer_policy": p_policy, "idle_timeout_s": 300, "reaper_interval_s": 60, "owner_grace_s": 120
     });
     let v_file = v_dir.path().join("relay.config");
     std::fs::write(&v_file, v_cfg.to_string()).unwrap();
@@ -398,4 +402,105 @@ async fn no_relay_configured_means_en_false_and_no_proxies() {
     send(&v_srv, &v_unit, json!({ "ty": "s", "mt": 9008, "ms": { "en": false } }));
     assert_eq!(next_ms(&mut v_unit, 9008).await["en"], false);
     assert!(andruavserver::comm_server::all_udp_proxies(&v_srv).await.is_empty());
+}
+
+/// Waits for a pushed 9021 with ms.act == p_act on p_client.
+async fn push_ms(p_client: &mut FakeClient, p_act: &str) -> Value {
+    for _ in 0..15 {
+        for f in p_client.wait_frames(1).await {
+            let j = f.json();
+            if j["mt"] == 9021 && j["ms"]["act"] == p_act {
+                return j["ms"].clone();
+            }
+        }
+    }
+    panic!("no 9021 act:{} push", p_act);
+}
+
+/// Drains p_client's incoming frames for p_ms and returns them as json.
+async fn collect_for(p_client: &mut FakeClient, p_ms: u64) -> Vec<Value> {
+    let mut v_out = Vec::new();
+    let v_end = tokio::time::Instant::now() + Duration::from_millis(p_ms);
+    while let Ok(v_frames) = tokio::time::timeout_at(v_end, p_client.wait_frames(1)).await {
+        v_out.extend(v_frames.iter().map(|f| f.json().clone()));
+    }
+    v_out
+}
+
+/// GL-0109: the relay's gcs_attempt/gcs_switched pushes are forwarded to
+/// the unit's account+group GCSs holding full control, 9021 'query'
+/// returns a waiting request, and an answered request clears everywhere.
+#[tokio::test]
+async fn gcs_attempt_and_switched_reach_full_control_gcs_and_query_sees_the_request() {
+    let v_bin = need_relay!();
+    // pure tofu: in allowlist_then_tofu the joined GCSs' IPs make the
+    // pair effective allowlist and a stranger drops as gcs_not_allowed,
+    // never raising an attempt
+    let v_relay = start_relay_policy(&v_bin, free_port(), "relay.test.local", "tofu");
+    let v_srv = relay_server(v_relay.port, json!({}));
+    UdpRelayClient::start(&v_srv);
+    assert!(wait_until(|| v_srv.relay.is_connected(), 5000).await, "relay link up");
+
+    // the unit opens its pair - first source pins, the rest are attempts
+    let mut v_unit = connect(&v_srv, Party::new("u1", "d").ip("10.9.9.9"));
+    request_9008(&v_srv, &v_unit, json!({}));
+    let v_ms = next_ms(&mut v_unit, 9008).await;
+    assert_eq!(v_ms["en"], true);
+    let v_port = v_ms["socket2"]["port"].as_u64().unwrap() as u16;
+
+    let mut v_gcs = connect(&v_srv, Party::new("gcs_a", "g").prm(json!(3840)).ip("10.1.1.1"));
+    let mut v_gcs2 = connect(&v_srv, Party::new("gcs_b", "g").prm(json!(3840)).ip("10.1.1.2"));
+    let mut v_viewer = connect(&v_srv, Party::new("gcs_viewer", "g").prm(json!(0x100)).ip("10.1.1.7"));
+    let mut v_stranger = connect(&v_srv, Party::new("gcs_other", "g").account(json!("acc2")).ip("10.2.2.2"));
+
+    // a GCS pins, then a same-IP new port moves the lock: gcs_switched
+    // with reason 'same_ip' reaches both full-control GCSs
+    let v_sock_a = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    v_sock_a.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let v_sock_b = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    v_sock_b.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    for v_g in [&mut v_gcs, &mut v_gcs2] {
+        let v_push = push_ms(v_g, "switched").await;
+        assert_eq!(v_push["tg_unit"], "u1");
+        assert_eq!(v_push["reason"], "same_ip");
+        assert_eq!(v_push["from_ip"], "127.0.0.1");
+    }
+
+    // a stranger knocks: gcs_attempt with its source and the expiry
+    let v_sock_c = std::net::UdpSocket::bind("127.0.0.2:0").unwrap();
+    v_sock_c.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    for v_g in [&mut v_gcs, &mut v_gcs2] {
+        let v_push = push_ms(v_g, "attempt").await;
+        assert_eq!(v_push["tg_unit"], "u1");
+        assert_eq!(v_push["from_ip"], "127.0.0.2");
+        assert_eq!(v_push["from_port"], v_sock_c.local_addr().unwrap().port() as i64);
+        assert!(v_push["until_ms"].as_i64().unwrap_or(0) > 0, "countdown carried");
+        assert_eq!(v_push["others"], 0);
+    }
+
+    // no permission / another account: nothing
+    let v_got = collect_for(&mut v_viewer, 500).await;
+    assert!(
+        !v_got.iter().any(|j| j["ms"]["act"] == "attempt" || j["ms"]["act"] == "switched"),
+        "viewer got a push: {:?}",
+        v_got
+    );
+    let v_got = collect_for(&mut v_stranger, 300).await;
+    assert!(!v_got.iter().any(|j| j["ms"]["act"] == "attempt" || j["ms"]["act"] == "switched"));
+
+    // a GCS that connects after the request can query it
+    let mut v_late = connect(&v_srv, Party::new("gcs_late", "g").prm(json!(3840)).ip("10.1.1.3"));
+    let v_q = peer(&v_srv, &mut v_late, "u1", "query").await;
+    assert_eq!(v_q["pinned"]["gcs"]["attempt"]["ip"], "127.0.0.2");
+    assert_eq!(v_q["pinned"]["gcs"]["attempt"]["port"], v_sock_c.local_addr().unwrap().port() as i64);
+
+    // one GCS answers (reset clears pin + request): the cleared state
+    // reaches the other logged-in GCSs as act:'state'
+    let v_r = peer(&v_srv, &mut v_gcs, "u1", "reset").await;
+    assert_eq!(v_r["applied"], true);
+    let v_push = push_ms(&mut v_gcs2, "state").await;
+    assert_eq!(v_push["tg_unit"], "u1");
+    assert!(v_push["pinned"]["gcs"].get("attempt").is_none(), "request cleared");
+    assert!(v_push["pinned"]["gcs"].get("ip").is_none(), "pin cleared");
 }

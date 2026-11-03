@@ -434,6 +434,15 @@ DroneEngage token.
 > `PERMISSION_ALLOW_GCS_FULL_CONTROL`. Without a relay pair, 9021 answers
 > `pinned: {gcs: {mode: 'open'}}`. **Activate** maps to `allow` and
 > **Reset peer** to `reset`.
+>
+> The comm server also *pushes* 9021 to every GCS socket in the unit's
+> account+group holding `PERMISSION_ALLOW_GCS_FULL_CONTROL`:
+> `{tg_unit, act: 'attempt', from_ip, from_port, others, until_ms}` when a
+> stranger knocks on a locked tofu pair (`until_ms` is when the request
+> expires — the badge counts down), `{tg_unit, act: 'switched', from_ip,
+> from_port, reason}` when the pin moves (`reason` is `same_ip`, `idle`,
+> `approved` or `kicked`), and `{tg_unit, act: 'state', pinned}` after a
+> mutating act lands, so an answered request clears everywhere.
 
 | Component | Change |
 |---|---|
