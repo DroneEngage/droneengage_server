@@ -69,7 +69,8 @@ allocation, plugin events), it names the doc and section.
   (system), handled by the comm server the unit is connected to.
 - **Only actor type `d` (drone) may request.** Others are logged and
   ignored.
-- `en:true`: if `allow_udpproxy_fixed_port !== true`, both requested
+- `en:true`: history — on the removed built-in path, if
+  `allow_udpproxy_fixed_port !== true`, both requested
   ports are forced to 0. Then `getUDPSocket(p_ws.name, ...)`. The reply
   reuses the request object: `ty: i`, `tg: <unit>`, `sd: <comm server>`,
   `ms: {en, socket1{address, port}, socket2{address, port}}`, sent on the
@@ -81,11 +82,15 @@ allocation, plugin events), it names the doc and section.
   `closeUDPSocket(name)` runs immediately. The reaper's idle path is
   therefore only the fallback for missed closes.
 
-The repo's `server.config` ships `allow_udpproxy_fixed_port: true`, so in
-production a unit's requested socket2 port (its persisted
-`udp_proxy_fixed_port`, default commented `15412`) is honoured. Proxy
-ports are therefore **predictable**, which matters for §5. The sim forces
-`false`.
+History: the shipped `server.config` used to set
+`allow_udpproxy_fixed_port: true`, so in production a unit's requested
+socket2 port (its persisted `udp_proxy_fixed_port`, default commented
+`15412`) was honoured and proxy ports were **predictable** — which
+matters for §5. That key and the built-in proxy are gone; the relay's
+`allow_fixed_port` now governs whether requested ports are honoured, and
+`peer_change_port` deliberately randomizes free ports (§5.2), so on a
+public relay ports are *not* predictable. The sim forces `false` on the
+old key anyway.
 
 ### 1.3 Admin from the authenticator — `js_andruav_comm_server.js:200-270`
 
@@ -516,8 +521,9 @@ The relay can't see websockets, so presence comes from the owner:
   and `tk` (reply), and the new 9021 carries the pin state (in place of
   the 1071 `pin` field first proposed here, see §5.3). Old de_mavlink
   versions and old webclients ignore unknown fields.
-- `allow_udpproxy_fixed_port` keeps its meaning for the built-in path.
-  The relay's `allow_fixed_port` plus the range replaces it there.
+- `allow_udpproxy_fixed_port` keeps its meaning only as history for the
+  removed built-in path. The relay's `allow_fixed_port` plus the range
+  replaces it there.
 - Security defaults during migration: `require_unit_token: false`,
   `gcs_peer_policy: allowlist_then_tofu`. TOFU and the allowlist need no
   client change, so **operators get injection protection on day one**
