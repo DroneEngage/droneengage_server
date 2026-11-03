@@ -15,6 +15,9 @@ Transitioning from Node.js to Rust and applying targeted hot-path concurrency an
 * **Memory Footprint:** Base RAM decreased from **~235 MB** (Node.js V8 heap) to **~125 MB** in Rust (**46.8% reduction / ~1.9x efficiency**), with zero garbage collection (GC) tail-latency pauses.
 * **UDP Telemetry Relay:** Decoupled into an independent daemon (`droneengage_udp_proxy`) with lock-free per-pair forwarding, achieving **160,000 pps** clean delivery and **387,028 pps** burst delivery across a 10-drone fleet (>10x improvement over in-process Node.js UDP proxying).
 
+> **Real Hardware Verification:** For physical test readings comparing Node.js 5.6.1 against the latest Rust stack over a real network on the Raspberry Pi 4 production airgap server (`airgap.local`), see the companion report: **[LIVE_TEST_ON_RPI.md](LIVE_TEST_ON_RPI.md)**.
+
+
 ---
 
 ## 2. Baseline Comparison: Original Node.js vs Initial Rust Port
