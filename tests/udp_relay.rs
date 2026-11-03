@@ -504,3 +504,112 @@ async fn gcs_attempt_and_switched_reach_full_control_gcs_and_query_sees_the_requ
     assert!(v_push["pinned"]["gcs"].get("attempt").is_none(), "request cleared");
     assert!(v_push["pinned"]["gcs"].get("ip").is_none(), "pin cleared");
 }
+
+/// 9021 with arbitrary ms fields - returns the reply ms (pushes carry
+/// ms.act and are skipped; replies never do).
+async fn peer_ms(p_srv: &Arc<andruavserver::Server>, p_gcs: &mut FakeClient, p_ms: Value) -> Value {
+    send(p_srv, p_gcs, json!({ "ty": "s", "mt": 9021, "ms": p_ms }));
+    for _ in 0..20 {
+        for f in p_gcs.wait_frames(1).await {
+            let j = f.json();
+            if j["mt"] == 9021 && j["ms"].get("act").is_none() {
+                return j["ms"].clone();
+            }
+        }
+    }
+    panic!("no 9021 reply");
+}
+
+/// GL-0110: act switch/reject/kick/change_port reach the relay with the
+/// right fields under the 9021 permission rule, secs is capped, and a
+/// dead relay answers relay_unavailable.
+#[tokio::test]
+async fn gcs_9021_actions_reach_the_relay_under_the_permission_rule() {
+    let v_bin = need_relay!();
+    let mut v_relay = start_relay_policy(&v_bin, free_port(), "relay.test.local", "tofu");
+    let v_srv = relay_server(v_relay.port, json!({}));
+    UdpRelayClient::start(&v_srv);
+    assert!(wait_until(|| v_srv.relay.is_connected(), 5000).await, "relay link up");
+
+    let mut v_unit = connect(&v_srv, Party::new("u1", "d").ip("10.9.9.9"));
+    request_9008(&v_srv, &v_unit, json!({}));
+    let v_port = next_ms(&mut v_unit, 9008).await["socket2"]["port"].as_u64().unwrap() as u16;
+
+    let mut v_gcs = connect(&v_srv, Party::new("gcs_a", "g").prm(json!(3840)).ip("10.1.1.1"));
+    let mut v_gcs2 = connect(&v_srv, Party::new("gcs_b", "g").prm(json!(3840)).ip("10.1.1.2"));
+    let mut v_viewer = connect(&v_srv, Party::new("gcs_viewer", "g").prm(json!(0x100)).ip("10.1.1.7"));
+    let mut v_stranger = connect(&v_srv, Party::new("gcs_other", "g").account(json!("acc2")).ip("10.2.2.2"));
+
+    // refusals first: another account, no full control, missing fields
+    assert_eq!(
+        peer_ms(&v_srv, &mut v_stranger, json!({ "tg_unit": "u1", "act": "kick" })).await,
+        json!({ "tg_unit": "u1", "error": "not_allowed" })
+    );
+    assert_eq!(
+        peer_ms(&v_srv, &mut v_viewer, json!({ "tg_unit": "u1", "act": "reject", "ip": "9.9.9.9" })).await,
+        json!({ "tg_unit": "u1", "error": "permission_denied" })
+    );
+    assert_eq!(
+        peer_ms(&v_srv, &mut v_gcs, json!({ "tg_unit": "u1", "act": "reject" })).await,
+        json!({ "tg_unit": "u1", "error": "bad_request" }),
+        "reject needs ip"
+    );
+
+    // pin a source, raise a waiting attempt, then approve it
+    let v_sock_a = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    v_sock_a.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let v_sock_c = std::net::UdpSocket::bind("127.0.0.2:0").unwrap();
+    v_sock_c.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    let _ = push_ms(&mut v_gcs, "attempt").await;
+    let v_sw = peer_ms(
+        &v_srv,
+        &mut v_gcs,
+        json!({ "tg_unit": "u1", "act": "switch", "ip": "127.0.0.2", "port": v_sock_c.local_addr().unwrap().port() }),
+    )
+    .await;
+    assert_eq!(v_sw["applied"], true, "{}", v_sw);
+    assert_eq!(v_sw["pinned"]["gcs"]["ip"], "127.0.0.2", "the lock moved to the approved source");
+    assert_eq!(push_ms(&mut v_gcs2, "switched").await["reason"], "approved", "the group's other GCS sees the approval");
+
+    // reject above the cap is reduced to it (the relay echoes the secs)
+    let v_rej = peer_ms(
+        &v_srv,
+        &mut v_gcs,
+        json!({ "tg_unit": "u1", "act": "reject", "ip": "127.0.0.9", "secs": 99999 }),
+    )
+    .await;
+    assert_eq!(v_rej["applied"], true, "{}", v_rej);
+    let v_secs = v_rej["secs"].as_f64().unwrap_or(0.0);
+    assert!(v_secs > 3500.0 && v_secs <= 3600.0, "secs capped at 3600: {}", v_secs);
+
+    // kick frees the pin and rejects the current GCS
+    let v_kick = peer_ms(&v_srv, &mut v_gcs, json!({ "tg_unit": "u1", "act": "kick", "secs": 5 })).await;
+    assert_eq!(v_kick["applied"], true, "{}", v_kick);
+    assert_eq!(push_ms(&mut v_gcs2, "switched").await["reason"], "kicked");
+    assert!(v_kick["pinned"]["gcs"].get("ip").is_none(), "kick freed the pin");
+
+    // change_port: the pair moves socket2 and the new port reaches the GCSs
+    let v_cp = peer_ms(&v_srv, &mut v_gcs, json!({ "tg_unit": "u1", "act": "change_port" })).await;
+    assert_eq!(v_cp["applied"], true, "{}", v_cp);
+    let v_new = push_ms(&mut v_gcs2, "changed").await;
+    let v_new_port = v_new["socket2"]["port"].as_u64().unwrap() as u16;
+    assert_ne!(v_new_port, v_port, "socket2 moved to a fresh port");
+
+    // no relay connected: every action answers relay_unavailable
+    let _ = v_relay.child.kill();
+    let _ = v_relay.child.wait();
+    assert!(wait_until(|| !v_srv.relay.is_connected(), 5000).await, "relay link down");
+    for v_act in ["switch", "reject", "kick", "change_port", "reset"] {
+        let v_ms = match v_act {
+            "switch" => json!({ "tg_unit": "u1", "act": "switch", "ip": "1.2.3.4", "port": 1 }),
+            "reject" => json!({ "tg_unit": "u1", "act": "reject", "ip": "1.2.3.4" }),
+            _ => json!({ "tg_unit": "u1", "act": v_act }),
+        };
+        assert_eq!(
+            peer_ms(&v_srv, &mut v_gcs, v_ms).await["error"],
+            "relay_unavailable",
+            "{v_act} with a dead relay"
+        );
+    }
+}

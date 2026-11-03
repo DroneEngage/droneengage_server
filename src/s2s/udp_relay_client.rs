@@ -1226,7 +1226,18 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
             if let Some(s) = field(&v_ms, "socket2") {
                 v_open.insert("socket2".into(), s.clone());
             }
+            // GL-0110: the group's webclients learn the new socket2 port
+            // after peer_change_port too
+            let mut v_out = Map::new();
+            if let Some(u) = v_unit.as_ref() {
+                v_out.insert("tg_unit".into(), u.clone());
+            }
+            v_out.insert("act".into(), json!("changed"));
+            for s in ["socket1", "socket2"] {
+                v_out.insert(s.into(), v_open.get(s).cloned().unwrap_or(Value::Null));
+            }
             push_to_unit(p_server, v_account.as_ref(), v_unit.as_ref(), unit_payload(&Value::Object(v_open)));
+            push_to_gcs(p_server, v_account.as_ref(), v_group.as_ref(), Value::Object(v_out));
         }
         // GL-0109: a stranger knocking, or the lock moving — the group's
         // full-control GCSs learn of it as a 9021 system message
@@ -1298,6 +1309,10 @@ async fn relay_pinned(p_relay: &Arc<RelayConn>, p_account: Option<&Value>, p_uni
         .unwrap_or(Value::Null))
 }
 
+/// Cap on the secs a GCS may pass to reject/kick (GL-0110); the relay
+/// applies its own gcs_reject_max_s on top.
+const GCS_REJECT_CAP_S: f64 = 3600.0;
+
 /// ToInt32(x) & mask, as JavaScript's `&` does.
 fn js_and(p_value: f64, p_mask: i64) -> i64 {
     if !p_value.is_finite() {
@@ -1327,7 +1342,9 @@ pub async fn handle_gcs_peer_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_j
     };
     let Some(v_login) = p_ctx.login.clone().filter(|l| l.actor_is(CONST_ACTOR_TYPE_GCS)) else { return };
     let v_act = match (v_tg_unit.as_ref().and_then(Value::as_str), v_act.as_deref()) {
-        (Some(_), Some(a @ ("allow" | "reset" | "query"))) => a.to_string(),
+        (Some(_), Some(a @ ("allow" | "reset" | "query" | "switch" | "reject" | "kick" | "change_port"))) => {
+            a.to_string()
+        }
         _ => {
             fn_reply(&mut p_jmsg, json!({ "error": "bad_request" }));
             return;
@@ -1374,6 +1391,7 @@ pub async fn handle_gcs_peer_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_j
     let v_ip = p_server.hub().client(p_ctx.conn).and_then(|c| c.remote_ip.clone());
     let v_result: Result<Value, String> = async {
         let mut v_applied: Option<bool> = None;
+        let mut v_secs_echo: Option<Value> = None;
         if v_act == "allow" {
             let Some(ip) = v_ip.filter(|ip| !ip.is_empty()) else {
                 return Ok(json!({ "error": "no_ip" }));
@@ -1383,12 +1401,48 @@ pub async fn handle_gcs_peer_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_j
         } else if v_act == "reset" {
             let r = v_relay.request("peer_reset", json!({ "account": v_account, "unit": v_tg, "side": "gcs" })).await?;
             v_applied = Some(is_success(&r) && field(&r["ms"], "applied") == Some(&Value::Bool(true)));
+        } else if v_act == "switch" {
+            // approve the waiting attempt - the lock moves to {ip, port}
+            let (Some(ip), Some(port)) = (field(&v_req, "ip").and_then(Value::as_str), field(&v_req, "port")) else {
+                return Ok(json!({ "error": "bad_request" }));
+            };
+            let r = v_relay
+                .request("peer_switch", json!({ "account": v_account, "unit": v_tg, "ip": ip, "port": port }))
+                .await?;
+            v_applied = Some(is_success(&r) && field(&r["ms"], "applied") == Some(&Value::Bool(true)));
+        } else if v_act == "reject" {
+            let Some(ip) = field(&v_req, "ip").and_then(Value::as_str) else {
+                return Ok(json!({ "error": "bad_request" }));
+            };
+            let v_secs = js_number(field(&v_req, "secs"));
+            let mut v_ms = json!({ "account": v_account, "unit": v_tg, "ip": ip });
+            if v_secs.is_finite() && v_secs > 0.0 {
+                v_ms["secs"] = json!(v_secs.min(GCS_REJECT_CAP_S));
+            }
+            let r = v_relay.request("peer_reject", v_ms).await?;
+            v_applied = Some(is_success(&r) && field(&r["ms"], "applied") == Some(&Value::Bool(true)));
+            v_secs_echo = field(&r["ms"], "secs").cloned();
+        } else if v_act == "kick" {
+            let v_secs = js_number(field(&v_req, "secs"));
+            let mut v_ms = json!({ "account": v_account, "unit": v_tg });
+            if v_secs.is_finite() && v_secs > 0.0 {
+                v_ms["secs"] = json!(v_secs.min(GCS_REJECT_CAP_S));
+            }
+            let r = v_relay.request("peer_kick", v_ms).await?;
+            v_applied = Some(is_success(&r) && field(&r["ms"], "applied") == Some(&Value::Bool(true)));
+            v_secs_echo = field(&r["ms"], "secs").cloned();
+        } else if v_act == "change_port" {
+            let r = v_relay.request("peer_change_port", json!({ "account": v_account, "unit": v_tg })).await?;
+            v_applied = Some(is_success(&r) && field(&r["ms"], "applied") == Some(&Value::Bool(true)));
         }
         let v_pinned = relay_pinned(&v_relay, v_account.as_ref(), &v_tg).await?;
         let mut v_ms = Map::new();
         v_ms.insert("pinned".into(), v_pinned);
         if let Some(a) = v_applied {
             v_ms.insert("applied".into(), json!(a));
+        }
+        if let Some(s) = v_secs_echo {
+            v_ms.insert("secs".into(), s);
         }
         Ok(Value::Object(v_ms))
     }

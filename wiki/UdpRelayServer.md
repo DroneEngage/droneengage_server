@@ -428,11 +428,20 @@ DroneEngage token.
 > **Implementation note (TASK-54).** The optional `pin` field on 1071, listed
 > in the webclient row below, was **not** implemented. de_mavlink sends 1071
 > and can't know the relay's pin state. Instead, a GCS uses the comm-server
-> system message **9021 `UdpProxyPeer`** `{tg_unit, act: 'allow'|'reset'|'query'}`.
-> The reply is `{tg_unit, pinned, applied?}` or `{tg_unit, error}`. The GCS
-> must be in the unit's account and group, and `allow`/`reset` also need
-> `PERMISSION_ALLOW_GCS_FULL_CONTROL`. Without a relay pair, 9021 answers
-> `pinned: {gcs: {mode: 'open'}}`. **Activate** maps to `allow` and
+> system message **9021 `UdpProxyPeer`** `{tg_unit, act}` where `act` is
+> `allow`, `reset` or `query`, plus the takeover actions: `switch` `{ip,
+> port}` approves the waiting request and moves the lock to that address
+> (`peer_switch`); `reject` `{ip, secs?}` drops that IP for `secs` seconds
+> (`peer_reject`, default `gcs_reject_default_s`); `kick` `{secs?}` drops
+> the current GCS IP and frees the pin (`peer_kick`); `change_port` moves
+> socket2 to a fresh port (`peer_change_port`). Client-sent `secs` is
+> capped at 3600 s server-side, then at the relay's `gcs_reject_max_s`.
+> The reply is `{tg_unit, pinned, applied?, secs?}` or `{tg_unit, error}`
+> — `secs` echoes the effective reject duration for `reject`/`kick`. The
+> GCS must be in the unit's account and group, and everything except
+> `query` needs `PERMISSION_ALLOW_GCS_FULL_CONTROL`. Without a relay pair
+> 9021 answers `pinned: {gcs: {mode: 'open'}}`; with a disconnected relay
+> it answers `error: relay_unavailable`. **Activate** maps to `allow` and
 > **Reset peer** to `reset`.
 >
 > The comm server also *pushes* 9021 to every GCS socket in the unit's
@@ -441,8 +450,10 @@ DroneEngage token.
 > stranger knocks on a locked tofu pair (`until_ms` is when the request
 > expires — the badge counts down), `{tg_unit, act: 'switched', from_ip,
 > from_port, reason}` when the pin moves (`reason` is `same_ip`, `idle`,
-> `approved` or `kicked`), and `{tg_unit, act: 'state', pinned}` after a
-> mutating act lands, so an answered request clears everywhere.
+> `approved` or `kicked`), `{tg_unit, act: 'changed', socket1, socket2}`
+> when the pair's sockets move (e.g. after `change_port`), and `{tg_unit,
+> act: 'state', pinned}` after a mutating act lands, so an answered
+> request clears everywhere.
 
 | Component | Change |
 |---|---|
