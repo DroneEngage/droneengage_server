@@ -443,7 +443,25 @@ impl UdpRelayClient {
     /// What is worth telling the operator about the UDP proxy settings at startup.
     pub fn config_warnings(p_cfg: &Config) -> Vec<&'static str> {
         let mut v_out = Vec::new();
-        if !matches!(p_cfg.get("udp_relay"), Some(Value::Array(a)) if !a.is_empty()) {
+        if matches!(p_cfg.get("udp_relay"), Some(Value::Array(a)) if !a.is_empty()) {
+            // GL-0097: without a shared secret or an Ed25519 key the relay
+            // link never authenticates and every drone silently gets
+            // en:false — say so loudly at startup
+            let v_env = std::env::var("de_s2s_shared_secret").map(|s| !s.trim().is_empty()).unwrap_or(false);
+            let v_file = p_cfg
+                .string("s2s_shared_secret_file")
+                .map(|f| p_cfg.resolve(&f).exists())
+                .unwrap_or(false);
+            let v_key = p_cfg
+                .string("s2s_my_private_key")
+                .map(|f| p_cfg.resolve(&f).exists())
+                .unwrap_or(false);
+            if !v_env && !v_file && !v_key {
+                v_out.push(
+                    "UDP relay has no shared secret and no Ed25519 key: copy the relay's s2s_shared_secret.key here or set de_s2s_shared_secret — drones get en:false until then",
+                );
+            }
+        } else {
             v_out.push("UDP proxy is off: udp_relay is empty, so drones get en:false");
         }
         if p_cfg.get("udp_relay_fallback").and_then(Value::as_str) == Some("builtin") {

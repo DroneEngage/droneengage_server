@@ -10,6 +10,7 @@ mod common;
 use andruavserver::s2s::udp_relay_client::{
     select_relay_id, unit_payload, UdpRelayClient, SELECT_FIRST_HEALTHY, SELECT_HASH, SELECT_LEAST_LOADED,
 };
+use andruavserver::Config;
 use common::*;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -611,5 +612,36 @@ async fn gcs_9021_actions_reach_the_relay_under_the_permission_rule() {
             "relay_unavailable",
             "{v_act} with a dead relay"
         );
+    }
+}
+
+/// GL-0097: a configured relay with no shared secret and no Ed25519 key
+/// warns loudly at startup — silently, every drone gets en:false.
+#[test]
+fn missing_relay_secret_warns_loudly_and_a_secret_file_silences_it() {
+    let v_env = std::env::var("de_s2s_shared_secret").ok();
+    std::env::remove_var("de_s2s_shared_secret");
+    let v_relay = json!([{ "host": "127.0.0.1", "port": 9100, "id": "R1", "ssl": false }]);
+
+    let v_cfg = Config::from_value(json!({ "server_id": "S", "udp_relay": v_relay }), env!("CARGO_MANIFEST_DIR"));
+    let v_w = UdpRelayClient::config_warnings(&v_cfg);
+    assert!(
+        v_w.iter().any(|w| w.contains("de_s2s_shared_secret") && w.contains("s2s_shared_secret.key")),
+        "the warning names the file and the env var: {:?}",
+        v_w
+    );
+
+    // an existing secret file (or the env var, or a private key) silences it
+    let v_dir = tempfile::tempdir().unwrap();
+    let v_secret = v_dir.path().join("s2s_shared_secret.key");
+    std::fs::write(&v_secret, "abc123\n").unwrap();
+    let v_cfg = Config::from_value(
+        json!({ "server_id": "S", "s2s_shared_secret_file": v_secret.to_str().unwrap(), "udp_relay": v_relay }),
+        env!("CARGO_MANIFEST_DIR"),
+    );
+    assert!(!UdpRelayClient::config_warnings(&v_cfg).iter().any(|w| w.contains("no shared secret")));
+
+    if let Some(v) = v_env {
+        std::env::set_var("de_s2s_shared_secret", v);
     }
 }

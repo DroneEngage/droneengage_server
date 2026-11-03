@@ -204,6 +204,13 @@ relay's secret. Otherwise it uses Ed25519 with `s2s_my_private_key`, and the
 relay lists this `server_id` in its `s2s_trusted_server_keys`. Self-signed
 relay certificates are accepted, as on the storage link.
 
+When the relay and the comm server are installed together, copy the relay's
+`s2s_shared_secret.key` next to this server's config (the shipped
+`s2s_shared_secret_file` points there), or export `de_s2s_shared_secret` —
+the secret is not created here, and without it the relay link never
+authenticates and every drone's 9008 answers `en:false`. A missing secret
+prints a startup warning naming both the file and the variable.
+
 What the broker does:
 - **Unit disconnect:** the relay is told `unit_offline`, and the pair idles
   out there. A quick reconnect keeps the same ports.
