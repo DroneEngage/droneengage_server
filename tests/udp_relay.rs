@@ -203,12 +203,16 @@ fn start_relay(p_bin: &PathBuf, p_port: u16, p_public_host: &str) -> Relay {
 /// DE-0081: disjoint 20-port udp_port_range per relay process. Deriving
 /// the range from `control_port % 100` let two relays spawned close
 /// together share one range - a pin packet for one test's pair could
-/// then land on the other relay (or its port be handed out twice).
+/// then land on the other relay (or its port be handed out twice). The
+/// counter is per process, so the band is staggered by pid as well:
+/// two cargo invocations running this binary in parallel (gate vs a
+/// developer run) no longer offer each other the same bind candidates.
 static RELAY_RANGE_INDEX: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 
 fn start_relay_policy(p_bin: &PathBuf, p_port: u16, p_public_host: &str, p_policy: &str) -> Relay {
     let v_dir = tempfile::tempdir().unwrap();
-    let v_lo = 47000 + RELAY_RANGE_INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed) * 20;
+    let v_slot = (std::process::id() % 64) as u16;
+    let v_lo = 40000 + v_slot * 320 + RELAY_RANGE_INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed) * 20;
     let v_cfg = json!({
         "server_id": "R", "server_ip": "127.0.0.1", "server_port": p_port, "enable_SSL": false,
         "s2s_cert_enabled": false, "udp_bind_ip": "0.0.0.0", "public_host": p_public_host,
@@ -289,7 +293,11 @@ async fn peer(p_srv: &Arc<andruavserver::Server>, p_gcs: &mut FakeClient, p_unit
 
 /// DE-0081: one sent packet does not mean the pin landed - a second
 /// source sent too soon wins 'first_come' instead of 'same_ip'. Re-sends
-/// and polls 9021 'query' until the relay reports p_ip pinned (3 s cap).
+/// and polls 9021 'query' until the relay reports p_sock itself pinned
+/// - matching the port as well as the IP, so a stray same-IP source
+/// cannot satisfy the wait (3 s cap). Re-sends after the pin lands are
+/// no-ops (the pinned source only refreshes the heard clock), so the
+/// pin's switched push is emitted exactly once.
 async fn wait_pinned_gcs(
     p_srv: &Arc<andruavserver::Server>,
     p_gcs: &mut FakeClient,
@@ -298,6 +306,7 @@ async fn wait_pinned_gcs(
     p_port: u16,
     p_ip: &str,
 ) {
+    let v_src_port = p_sock.local_addr().unwrap().port() as u64;
     for _ in 0..30 {
         let _ = p_sock.send_to(b"hb", ("127.0.0.1", p_port));
         // peer_ms skips 9021 pushes (they carry ms.act; replies never do)
@@ -307,12 +316,44 @@ async fn wait_pinned_gcs(
             json!({ "tg_unit": p_unit, "act": "query" }),
         )
         .await;
-        if v_q["pinned"]["gcs"]["ip"] == p_ip {
+        let v_gcs = &v_q["pinned"]["gcs"];
+        if v_gcs["ip"] == p_ip && v_gcs["port"].as_u64() == Some(v_src_port) {
             return;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("pin on {} never showed in 9021 query", p_ip);
+}
+
+/// DE-0081: same idea for a waiting connection attempt - re-sends and
+/// polls 9021 'query' until p_sock shows as the waiting request (3 s
+/// cap), so a dropped first datagram cannot flake a later approve.
+/// Extra datagrams from the attempt's own source are no-ops, so the
+/// attempt push is emitted exactly once and `others` stays exact.
+async fn wait_attempt_gcs(
+    p_srv: &Arc<andruavserver::Server>,
+    p_gcs: &mut FakeClient,
+    p_unit: &str,
+    p_sock: &std::net::UdpSocket,
+    p_port: u16,
+    p_ip: &str,
+) {
+    let v_src_port = p_sock.local_addr().unwrap().port() as u64;
+    for _ in 0..30 {
+        let _ = p_sock.send_to(b"hb", ("127.0.0.1", p_port));
+        let v_q = peer_ms(
+            p_srv,
+            p_gcs,
+            json!({ "tg_unit": p_unit, "act": "query" }),
+        )
+        .await;
+        let v_att = &v_q["pinned"]["gcs"]["attempt"];
+        if v_att["ip"] == p_ip && v_att["port"].as_u64() == Some(v_src_port) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("attempt from {} never showed in 9021 query", p_ip);
 }
 
 #[tokio::test]
@@ -500,7 +541,10 @@ async fn gcs_attempt_and_switched_reach_full_control_gcs_and_query_sees_the_requ
         assert_eq!(push_ms(v_g, "switched").await["reason"], "first_come");
     }
     let v_sock_b = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-    v_sock_b.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    // wait until the lock is pinned on sock_b itself: the same_ip push
+    // is then emitted exactly once (re-sends of a pinned source are
+    // no-ops) and cannot be lost to a dropped datagram
+    wait_pinned_gcs(&v_srv, &mut v_viewer, "u1", &v_sock_b, v_port, "127.0.0.1").await;
     for v_g in [&mut v_gcs, &mut v_gcs2] {
         let v_push = push_ms(v_g, "switched").await;
         assert_eq!(v_push["tg_unit"], "u1");
@@ -508,9 +552,11 @@ async fn gcs_attempt_and_switched_reach_full_control_gcs_and_query_sees_the_requ
         assert_eq!(v_push["from_ip"], "127.0.0.1");
     }
 
-    // a stranger knocks: gcs_attempt with its source and the expiry
+    // a stranger knocks: gcs_attempt with its source and the expiry.
+    // Wait for the request to register before reading its push, same
+    // as the pin wait above.
     let v_sock_c = std::net::UdpSocket::bind("127.0.0.2:0").unwrap();
-    v_sock_c.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    wait_attempt_gcs(&v_srv, &mut v_viewer, "u1", &v_sock_c, v_port, "127.0.0.2").await;
     for v_g in [&mut v_gcs, &mut v_gcs2] {
         let v_push = push_ms(v_g, "attempt").await;
         assert_eq!(v_push["tg_unit"], "u1");
@@ -606,7 +652,9 @@ async fn gcs_9021_actions_reach_the_relay_under_the_permission_rule() {
         assert_eq!(push_ms(v_g, "switched").await["reason"], "first_come");
     }
     let v_sock_c = std::net::UdpSocket::bind("127.0.0.2:0").unwrap();
-    v_sock_c.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
+    // wait for the request to register (re-sent until it shows), so the
+    // approve below cannot land before the attempt exists
+    wait_attempt_gcs(&v_srv, &mut v_viewer, "u1", &v_sock_c, v_port, "127.0.0.2").await;
     let _ = push_ms(&mut v_gcs, "attempt").await;
     let v_sw = peer_ms(
         &v_srv,
