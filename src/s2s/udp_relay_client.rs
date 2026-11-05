@@ -778,6 +778,16 @@ fn push_to_gcs(p_server: &Server, p_account: Option<&Value>, p_group: Option<&Va
         v_c.handle.send_json(&Value::Object(v_msg));
         v_n += 1;
     }
+    // DE-0064: a push nobody gets was silent - say who was skipped
+    if v_n == 0 {
+        log(&format!(
+            "9021 push '{}' reached no GCS (account '{}', group '{}', {} client(s) connected)",
+            js_key(p_ms.get("act")),
+            v_account_key,
+            v_group_key,
+            v_hub.clients.len()
+        ));
+    }
     v_n
 }
 
