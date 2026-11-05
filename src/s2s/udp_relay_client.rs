@@ -391,6 +391,8 @@ struct UnitEntry {
     timer: Option<JoinHandle<()>>,
     waiting: Option<(Ctx, Value)>,
     opening: bool,
+    /// unit token from the last open reply; the changed push carries it too
+    tk: Option<Value>,
 }
 
 #[derive(Default)]
@@ -872,6 +874,7 @@ async fn open_on_relay(
         timer: None,
         waiting: None,
         opening: false,
+        tk: None,
     };
     let v_open = open_params(p_server, &v_entry_view);
     with_entry(p_server, p_key, p_serial, |e| e.opening = true);
@@ -890,6 +893,7 @@ async fn open_on_relay(
     with_entry(p_server, p_key, p_serial, |e| {
         e.state = UnitState::Relay;
         e.relay = Some(p_relay.clone());
+        e.tk = field(&v_rep["ms"], "tk").filter(|t| js_truthy(Some(t))).cloned();
     });
     p_server.relay.send_relay_status(p_server, p_relay);
     Ok(unit_payload(&v_rep["ms"]))
@@ -957,6 +961,7 @@ pub async fn handle_unit_request(p_server: &Arc<Server>, p_ctx: Ctx, mut p_jmsg:
         timer: None,
         waiting: None,
         opening: false,
+        tk: None,
     };
     v_me.m_st.lock().unwrap().units.insert(v_key.clone(), v_entry);
 
@@ -1219,11 +1224,11 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
     let v_entry = {
         let st = p_server.relay.m_st.lock().unwrap();
         st.units.get(&v_key).filter(|e| same_relay(&e.relay, p_relay)).map(|e| {
-            (e.serial, e.state, e.opening, e.group.clone())
+            (e.serial, e.state, e.opening, e.group.clone(), e.tk.clone())
         })
     };
     // a unit that moved to another relay ignores its old relay's pushes
-    let Some((v_serial, v_state, v_opening, v_group)) = v_entry else { return };
+    let Some((v_serial, v_state, v_opening, v_group, v_tk)) = v_entry else { return };
     match p_msg.get("mt").and_then(Value::as_str) {
         Some("closed") => {
             // only pairs a unit still wants
@@ -1253,6 +1258,10 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
             }
             if let Some(s) = field(&v_ms, "socket2") {
                 v_open.insert("socket2".into(), s.clone());
+            }
+            // DE-0071: the unit needs its token tk after peer_change_port
+            if let Some(t) = field(&v_ms, "tk").filter(|t| js_truthy(Some(t))).cloned().or(v_tk) {
+                v_open.insert("tk".into(), t);
             }
             // GL-0110: the group's webclients learn the new socket2 port
             // after peer_change_port too
@@ -1553,4 +1562,17 @@ async fn list_relay(p_server: &Arc<Server>, p_relay: Arc<RelayConn>) -> Vec<(Val
             (Value::Object(v_row), p_relay.clone())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn changed_push_payload_keeps_tk() {
+        let v_open = json!({ "en": true, "socket1": {"address":"1.2.3.4","port":1}, "socket2": {"address":"1.2.3.4","port":2}, "tk": "abc" });
+        let v_p = unit_payload(&v_open);
+        assert_eq!(v_p["tk"], "abc");
+        assert_eq!(v_p["socket2"]["port"], 2);
+    }
 }
