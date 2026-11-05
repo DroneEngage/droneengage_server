@@ -200,9 +200,15 @@ fn start_relay(p_bin: &PathBuf, p_port: u16, p_public_host: &str) -> Relay {
     start_relay_policy(p_bin, p_port, p_public_host, "allowlist_then_tofu")
 }
 
+/// DE-0081: disjoint 20-port udp_port_range per relay process. Deriving
+/// the range from `control_port % 100` let two relays spawned close
+/// together share one range - a pin packet for one test's pair could
+/// then land on the other relay (or its port be handed out twice).
+static RELAY_RANGE_INDEX: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
 fn start_relay_policy(p_bin: &PathBuf, p_port: u16, p_public_host: &str, p_policy: &str) -> Relay {
     let v_dir = tempfile::tempdir().unwrap();
-    let v_lo = 47000 + (p_port % 100) * 20;
+    let v_lo = 47000 + RELAY_RANGE_INDEX.fetch_add(1, std::sync::atomic::Ordering::Relaxed) * 20;
     let v_cfg = json!({
         "server_id": "R", "server_ip": "127.0.0.1", "server_port": p_port, "enable_SSL": false,
         "s2s_cert_enabled": false, "udp_bind_ip": "0.0.0.0", "public_host": p_public_host,
@@ -279,6 +285,34 @@ async fn next_ms(p_client: &mut FakeClient, p_mt: i64) -> Value {
 async fn peer(p_srv: &Arc<andruavserver::Server>, p_gcs: &mut FakeClient, p_unit: &str, p_act: &str) -> Value {
     send(p_srv, p_gcs, json!({ "ty": "s", "mt": 9021, "ms": { "tg_unit": p_unit, "act": p_act } }));
     next_ms(p_gcs, 9021).await
+}
+
+/// DE-0081: one sent packet does not mean the pin landed - a second
+/// source sent too soon wins 'first_come' instead of 'same_ip'. Re-sends
+/// and polls 9021 'query' until the relay reports p_ip pinned (3 s cap).
+async fn wait_pinned_gcs(
+    p_srv: &Arc<andruavserver::Server>,
+    p_gcs: &mut FakeClient,
+    p_unit: &str,
+    p_sock: &std::net::UdpSocket,
+    p_port: u16,
+    p_ip: &str,
+) {
+    for _ in 0..30 {
+        let _ = p_sock.send_to(b"hb", ("127.0.0.1", p_port));
+        // peer_ms skips 9021 pushes (they carry ms.act; replies never do)
+        let v_q = peer_ms(
+            p_srv,
+            p_gcs,
+            json!({ "tg_unit": p_unit, "act": "query" }),
+        )
+        .await;
+        if v_q["pinned"]["gcs"]["ip"] == p_ip {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("pin on {} never showed in 9021 query", p_ip);
 }
 
 #[tokio::test]
@@ -455,10 +489,16 @@ async fn gcs_attempt_and_switched_reach_full_control_gcs_and_query_sees_the_requ
     let mut v_stranger = connect(&v_srv, Party::new("gcs_other", "g").account(json!("acc2")).ip("10.2.2.2"));
 
     // a GCS pins, then a same-IP new port moves the lock: gcs_switched
-    // with reason 'same_ip' reaches both full-control GCSs
+    // with reason 'same_ip' reaches both full-control GCSs. The initial
+    // pin itself is a switched/first_come push (SL-0187) - drain it on
+    // both GCSs or it stays queued and masks the same_ip push below.
+    // The pin query runs on the viewer: a poll on a full-control client
+    // would consume the pushed frame while scanning for the reply.
     let v_sock_a = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-    v_sock_a.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_pinned_gcs(&v_srv, &mut v_viewer, "u1", &v_sock_a, v_port, "127.0.0.1").await;
+    for v_g in [&mut v_gcs, &mut v_gcs2] {
+        assert_eq!(push_ms(v_g, "switched").await["reason"], "first_come");
+    }
     let v_sock_b = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
     v_sock_b.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
     for v_g in [&mut v_gcs, &mut v_gcs2] {
@@ -556,10 +596,15 @@ async fn gcs_9021_actions_reach_the_relay_under_the_permission_rule() {
         "reject needs ip"
     );
 
-    // pin a source, raise a waiting attempt, then approve it
+    // pin a source, raise a waiting attempt, then approve it - and
+    // drain the pin's own switched/first_come push on both GCSs first,
+    // or the queued push masks the switched/approved one asserted below.
+    // The pin query runs on the viewer for the same reason as above.
     let v_sock_a = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-    v_sock_a.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_pinned_gcs(&v_srv, &mut v_viewer, "u1", &v_sock_a, v_port, "127.0.0.1").await;
+    for v_g in [&mut v_gcs, &mut v_gcs2] {
+        assert_eq!(push_ms(v_g, "switched").await["reason"], "first_come");
+    }
     let v_sock_c = std::net::UdpSocket::bind("127.0.0.2:0").unwrap();
     v_sock_c.send_to(b"hb", ("127.0.0.1", v_port)).unwrap();
     let _ = push_ms(&mut v_gcs, "attempt").await;
