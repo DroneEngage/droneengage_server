@@ -1213,6 +1213,23 @@ async fn failover(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>) {
 ///   closed owner_lost -> the relay gave up on us: move the unit
 ///   closed otherwise  -> 9008 en:false to the unit
 ///   changed           -> unsolicited 9008 en:true with the new sockets
+/// The open payload the 'changed' push forwards to the unit: en:true,
+/// the new sockets, and the unit token tk — the push's tk wins, else the
+/// one stored from the last open reply (DE-0071/DE-0072).
+fn changed_open_payload(p_ms: &Value, p_stored_tk: &Option<Value>) -> Value {
+    let mut v_open = Map::new();
+    v_open.insert("en".into(), json!(true));
+    for s in ["socket1", "socket2"] {
+        if let Some(v) = field(p_ms, s) {
+            v_open.insert(s.into(), v.clone());
+        }
+    }
+    if let Some(t) = field(p_ms, "tk").filter(|t| js_truthy(Some(t))).cloned().or_else(|| p_stored_tk.clone()) {
+        v_open.insert("tk".into(), t);
+    }
+    Value::Object(v_open)
+}
+
 fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value) {
     let v_ms = p_msg.get("ms").filter(|m| js_truthy(Some(m))).cloned().unwrap_or_else(|| json!({}));
     if !js_strict_eq(field(&v_ms, "owner"), p_server.cfg.get("server_id")) {
@@ -1251,18 +1268,7 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
             p_server.relay.send_relay_status(p_server, p_relay);
         }
         Some("changed") => {
-            let mut v_open = Map::new();
-            v_open.insert("en".into(), json!(true));
-            if let Some(s) = field(&v_ms, "socket1") {
-                v_open.insert("socket1".into(), s.clone());
-            }
-            if let Some(s) = field(&v_ms, "socket2") {
-                v_open.insert("socket2".into(), s.clone());
-            }
-            // DE-0071: the unit needs its token tk after peer_change_port
-            if let Some(t) = field(&v_ms, "tk").filter(|t| js_truthy(Some(t))).cloned().or(v_tk) {
-                v_open.insert("tk".into(), t);
-            }
+            let v_open = changed_open_payload(&v_ms, &v_tk);
             // GL-0110: the group's webclients learn the new socket2 port
             // after peer_change_port too
             let mut v_out = Map::new();
@@ -1273,7 +1279,7 @@ fn on_relay_push(p_server: &Arc<Server>, p_relay: &Arc<RelayConn>, p_msg: &Value
             for s in ["socket1", "socket2"] {
                 v_out.insert(s.into(), v_open.get(s).cloned().unwrap_or(Value::Null));
             }
-            push_to_unit(p_server, v_account.as_ref(), v_unit.as_ref(), unit_payload(&Value::Object(v_open)));
+            push_to_unit(p_server, v_account.as_ref(), v_unit.as_ref(), unit_payload(&v_open));
             push_to_gcs(p_server, v_account.as_ref(), v_group.as_ref(), Value::Object(v_out));
         }
         // GL-0109: a stranger knocking, or the lock moving — the group's
@@ -1574,5 +1580,32 @@ mod tests {
         let v_p = unit_payload(&v_open);
         assert_eq!(v_p["tk"], "abc");
         assert_eq!(v_p["socket2"]["port"], 2);
+    }
+
+    #[test]
+    fn changed_branch_carries_push_tk() {
+        // DE-0072: the changed branch of on_relay_push must put tk in the
+        // message to the unit - the push's own tk wins
+        let v_ms = json!({ "socket1": {"address":"1.2.3.4","port":1},
+                           "socket2": {"address":"1.2.3.4","port":2},
+                           "tk": "pushtk" });
+        let v_open = changed_open_payload(&v_ms, &Some(json!("storedtk")));
+        assert_eq!(v_open["tk"], "pushtk");
+        assert_eq!(v_open["en"], true);
+        assert_eq!(v_open["socket2"]["port"], 2);
+        let v_p = unit_payload(&v_open);
+        assert_eq!(v_p["tk"], "pushtk");
+    }
+
+    #[test]
+    fn changed_branch_uses_stored_tk_when_push_has_none() {
+        // DE-0072: a changed push without tk falls back to the token
+        // stored from the last open reply
+        let v_ms = json!({ "socket1": {"address":"1.2.3.4","port":1},
+                           "socket2": {"address":"1.2.3.4","port":2} });
+        let v_open = changed_open_payload(&v_ms, &Some(json!("storedtk")));
+        assert_eq!(v_open["tk"], "storedtk");
+        let v_p = unit_payload(&v_open);
+        assert_eq!(v_p["tk"], "storedtk");
     }
 }
