@@ -14,6 +14,9 @@ const EVT_GPS = 3;
 const EVT_GPS_MOB = 4;
 const EVT_IMG = 5;
 const EVT_GCS = 6;
+const EVT_SIGNAL = 7;
+const EVT_VIDEO_ON = 8;
+const EVT_VIDEO_OFF = 9;
 
 class CommunicatorServer {
   constructor() {
@@ -83,6 +86,7 @@ class CommunicatorServer {
       this.messageQueue = [];
       for (const text of messages) {
         await this.publisher.send(['', JSON.stringify({ text })]);
+        console.log(`Published log entry: ${text}`);
       }
     } catch (err) {
       console.error(`Failed to publish batch: ${err.message}`);
@@ -373,6 +377,56 @@ class CommunicatorServer {
 
         case 6502:
           this.parseMavlink(ws, message, jmsg, binaryDataIndex);
+          break;
+
+        case 1059: // CONST_TYPE_AndruavMessage_CommSignalsStatus
+          let signalMsg = jmsg.ms;
+          if (typeof signalMsg === 'string') {
+            signalMsg = JSON.parse(signalMsg);
+          }
+
+          ws.m__status.m_mobile = true;
+          ws.m__status.m_mobileSignalLevel = signalMsg.r ?? 0;
+          ws.m__status.m_mobileNetworkType = signalMsg.s ?? 0;
+          if (signalMsg.op != null) ws.m__status.m_operatorName = signalMsg.op;
+          if (signalMsg.c != null)  ws.m__status.m_countryIso = signalMsg.c;
+          if (signalMsg.ds != null) ws.m__status.m_dataState = signalMsg.ds;
+
+          await this.writeToLogFile(
+            ws.m_loginRequest.m_accountID,
+            "info",
+            "signal",
+            `dbm:${signalMsg.r ?? 0} netType:${signalMsg.s ?? 0} op:${signalMsg.op ?? ''} country:${signalMsg.c ?? ''} dataState:${signalMsg.ds ?? 0}`,
+            EVT_SIGNAL
+          );
+          break;
+
+        case 1021:
+          let signalMsg2 = jmsg.ms;
+          if (typeof signalMsg2 === 'string') {
+            signalMsg2 = JSON.parse(signalMsg2);
+          }
+
+          // ms.w.packet, or the raw payload when w is absent
+          const w = signalMsg2.w || signalMsg2;
+          const packet = w && w.packet;
+          if (packet && packet.joinme) {
+            await this.writeToLogFile(
+              ws.m_loginRequest.m_accountID,
+              "important",
+              "video",
+              `video on ch:${w.channel} by:${w.number}`,
+              EVT_VIDEO_ON
+            );
+          } else if (packet && packet.hangup) {
+            await this.writeToLogFile(
+              ws.m_loginRequest.m_accountID,
+              "important",
+              "video",
+              `video off ch:${w.channel} by:${w.number}`,
+              EVT_VIDEO_OFF
+            );
+          }
           break;
       }
     } catch (err) {
