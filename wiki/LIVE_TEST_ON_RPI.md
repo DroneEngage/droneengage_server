@@ -20,15 +20,15 @@ Both server versions were tested on the exact same physical hardware and driven 
 | **Operating System** | Debian GNU/Linux 12 (bookworm) aarch64 |
 | **Kernel** | Linux 6.12.25+rpt-rpi-v8 #1 SMP PREEMPT (2025-04-30) |
 | **Storage** | 32 GB MicroSD Class 10 (23 GB free space) |
-| **Network Interface** | 10.x.x.x (Ethernet / direct local subnet) |
-| **Test Client Host** | 10.x.x.x (ThinkPad T14 Gen 6, 14 cores, Ubuntu Linux) |
+| **Network Interface** | dedicated LAN IP (Ethernet / direct local subnet) |
+| **Test Client Host** | test client host (ThinkPad T14 Gen 6, 14 cores, Ubuntu Linux) |
 
 ---
 
 ## 2. Test Setup & Methodology
 
 * **Client Tool:** `de_loadgen` (Rust, tokio + tokio-tungstenite, commit `f0e1932`) running on the client laptop. Client process CPU stayed under 3% of one core throughout all runs.
-* **Network Link:** Dedicated local network link between client (`10.x.x.x`) and Raspberry Pi server (`10.x.x.x`), avoiding loopback-only artifacts.
+* **Network Link:** Dedicated local network link between client host and the Raspberry Pi server, avoiding loopback-only artifacts.
 * **Server Configurations:**
   * **Legacy Node.js Baseline:** Node.js 5.6.1 (`build/server.min.js`), running under Node.js v22.20.0, pm2 managed, with production SSL certificates (`./ssl_local/ssl_airgap/`).
   * **Latest Rust:** Rust 6.0.0 (`andruavmainserver` with compiled-in plugins), compiled natively on the Pi (`cargo build --release`), running as user `droneengage` in `/opt/droneengage/comm_server/` via systemd (`de_comm.service`).

@@ -44,3 +44,4 @@ target/
 *_private.pem
 s2s_shared_secret.key*
 .env.local
+.vscode/
