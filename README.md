@@ -33,8 +33,8 @@ The server can operate in different modes:
 
 ```bash
 # Clone the repository
-git clone https://github.com/HefnySco/andruav_server.git
-cd andruav_server
+git clone https://github.com/DroneEngage/droneengage_server.git
+cd droneengage_server
 
 # Build
 cargo build --release
@@ -309,7 +309,7 @@ plugins. [droneengage_server_plugins](https://github.com/DroneEngage/droneengage
 
 Configuration loading, JavaScript-compatible JSON handling, the file
 logger, TLS/WebSocket plumbing and S2S authentication come from
-[droneengage_server_common](https://github.com/HefnySco/prv_droneengage_server_common)
+[droneengage_server_common](https://github.com/DroneEngage/droneengage_server_common)
 (branch `pr_rust`), shared with the storage server and the authenticator.
 
 ## Differences from the Node.js server
